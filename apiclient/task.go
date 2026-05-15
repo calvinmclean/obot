@@ -16,6 +16,32 @@ type ListTasksOptions struct {
 	AssistantID string
 }
 
+func (c *Client) GetTask(ctx context.Context, id string, opts ListTasksOptions) (result *types.Task, err error) {
+	url := fmt.Sprintf("/tasks/%s", id)
+	if opts.ThreadID != "" {
+		url = fmt.Sprintf("/threads/%s/tasks/%s", opts.ThreadID, id)
+	}
+
+	_, resp, err := c.doRequest(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	return toObject(resp, &types.Task{})
+}
+
+func (c *Client) GetProjectTask(ctx context.Context, assistantID, projectID, id string) (result *types.Task, err error) {
+	url := fmt.Sprintf("/assistants/%s/projects/%s/tasks/%s", assistantID, projectID, id)
+	_, resp, err := c.doRequest(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	return toObject(resp, &types.Task{})
+}
+
 func (c *Client) ListTasks(ctx context.Context, opts ListTasksOptions) (result types.TaskList, err error) {
 	defer func() {
 		sort.Slice(result.Items, func(i, j int) bool {
@@ -23,14 +49,10 @@ func (c *Client) ListTasks(ctx context.Context, opts ListTasksOptions) (result t
 		})
 	}()
 
-	if opts.ThreadID == "" && opts.AssistantID == "" {
-		return result, fmt.Errorf("either threadID or assistantID must be provided")
-	}
-
-	var url string
+	url := "/tasks"
 	if opts.ThreadID != "" {
 		url = fmt.Sprintf("/threads/%s/tasks", opts.ThreadID)
-	} else {
+	} else if opts.AssistantID != "" {
 		url = fmt.Sprintf("/assistants/%s/tasks", opts.AssistantID)
 	}
 
