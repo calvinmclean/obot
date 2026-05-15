@@ -43,6 +43,7 @@ func New() *cobra.Command {
 	}
 	return cmd.Command(root,
 		&Server{},
+		newAPICommand(root),
 		&Login{root: root},
 		&Logout{root: root},
 		&Scan{root: root},
