@@ -749,6 +749,44 @@ func TestAdminManagedSecretBindingManifestNoSourceValidatesAllBindings(t *testin
 	assert.Equal(t, manifest, result)
 }
 
+func TestApplySecretBindingOverlayOnlyMatchesExistingFields(t *testing.T) {
+	binding := &types.MCPSecretBinding{Name: "allowed-secret", Key: "token"}
+	manifest := types.MCPServerManifest{
+		Runtime: types.RuntimeRemote,
+		Env: []types.MCPEnv{
+			{MCPHeader: types.MCPHeader{Key: "API_TOKEN", Value: "manual"}},
+		},
+		RemoteConfig: &types.RemoteRuntimeConfig{
+			URL: "https://example.com/mcp",
+			Headers: []types.MCPHeader{
+				{Key: "Authorization", Value: "manual"},
+			},
+		},
+	}
+	overlay := types.MCPServerManifest{
+		Env: []types.MCPEnv{
+			{MCPHeader: types.MCPHeader{Key: "API_TOKEN", SecretBinding: binding}},
+			{MCPHeader: types.MCPHeader{Key: "IGNORED", SecretBinding: binding}},
+		},
+		RemoteConfig: &types.RemoteRuntimeConfig{
+			Headers: []types.MCPHeader{
+				{Key: "Authorization", SecretBinding: binding},
+				{Key: "Ignored-Header", SecretBinding: binding},
+			},
+		},
+	}
+
+	result := applySecretBindingOverlay(manifest, overlay)
+
+	assert.Equal(t, binding, result.Env[0].SecretBinding)
+	assert.Empty(t, result.Env[0].Value)
+	require.NotNil(t, result.RemoteConfig)
+	assert.Equal(t, binding, result.RemoteConfig.Headers[0].SecretBinding)
+	assert.Empty(t, result.RemoteConfig.Headers[0].Value)
+	assert.Len(t, result.Env, 1)
+	assert.Len(t, result.RemoteConfig.Headers, 1)
+}
+
 func TestCreateServerAdminCatalogSecretBindingRequiresAllowedSecret(t *testing.T) {
 	handler := newCreateServerSecretBindingTestHandler()
 	storage := newFakeStorage(t, &v1.MCPCatalog{ObjectMeta: metav1.ObjectMeta{Name: system.DefaultCatalog, Namespace: system.DefaultNamespace}})

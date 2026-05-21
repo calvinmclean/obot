@@ -24,7 +24,8 @@ import type {
 	AccessControlRule,
 	AccessControlRuleManifest,
 	K8sServerDetail,
-	MCPAllowedSecretBindingTarget
+	MCPAllowedSecretBindingTarget,
+	MCPSubField
 } from '../user/types';
 import type {
 	MCPCatalog,
@@ -943,7 +944,10 @@ export async function createMCPCatalogServer(
 export async function deployMultiUserTemplate(
 	catalogID: string,
 	catalogEntryID: string,
-	server?: { manifest?: { remoteConfig?: { url?: string } }; alias?: string },
+	server?: {
+		manifest?: { env?: MCPSubField[]; remoteConfig?: { url?: string; headers?: MCPSubField[] } };
+		alias?: string;
+	},
 	opts?: { fetch?: Fetcher }
 ): Promise<MCPCatalogServer> {
 	const response = (await doPost(

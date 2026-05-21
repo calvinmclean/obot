@@ -5,6 +5,8 @@
 		UserService,
 		type MCPCatalogEntry,
 		type MCPCatalogServer,
+		type MCPAllowedSecretBindingTarget,
+		type MCPSubField,
 		type MCPServerInstance
 	} from '$lib/services';
 	import { EventStreamService } from '$lib/services/admin/eventstream.svelte';
@@ -14,7 +16,8 @@
 		getSecretBindingEngineError,
 		isMultiUserServer,
 		isKubernetesRuntimeBackend,
-		hasEditableConfiguration
+		hasEditableConfiguration,
+		hasSecretBinding
 	} from '$lib/services/user/mcp';
 	import { version } from '$lib/stores';
 	import CopyButton from '../CopyButton.svelte';
@@ -68,6 +71,9 @@
 	let shouldShowAlias = $derived(
 		isDeployingMultiUserTemplate || (isConfigured && !isMultiUserServer(server))
 	);
+	let canBindSecretsForTemplate = $derived(
+		Boolean(isDeployingMultiUserTemplate && catalogID && !workspaceID)
+	);
 	let secretBindingEngineError = $derived(
 		isKubernetesRuntimeBackend(version.current.engine)
 			? undefined
@@ -78,6 +84,8 @@
 	let configDialog = $state<ReturnType<typeof CatalogConfigureForm>>();
 	let configureForm = $state<LaunchFormData | CompositeLaunchFormData>();
 	let configureFormTitle = $state<string>();
+	let secretBindingTargets = $state<MCPAllowedSecretBindingTarget[]>([]);
+	let loadingSecretBindingTargets = $state(false);
 
 	let chatLoading = $state(false);
 	let chatLoadingProgress = $state(0);
@@ -91,6 +99,24 @@
 	let launchMissingSecretBinding = $state(false);
 	let error = $state<string>();
 	let saving = $state(false);
+
+	$effect(() => {
+		if (
+			!canBindSecretsForTemplate ||
+			loadingSecretBindingTargets ||
+			secretBindingTargets.length > 0
+		) {
+			return;
+		}
+		loadingSecretBindingTargets = true;
+		AdminService.listMCPSecretBindingTargets()
+			.then((targets) => {
+				secretBindingTargets = targets;
+			})
+			.finally(() => {
+				loadingSecretBindingTargets = false;
+			});
+	});
 
 	let oauthDialog = $state<HTMLDialogElement>();
 	let oauthURL = $state<string>('');
@@ -158,17 +184,52 @@
 			name: '',
 			envs: item.manifest?.env?.map((env) => ({
 				...env,
-				value: ''
+				value: '',
+				secretBindingReadonly: hasSecretBinding(env)
 			})),
 			headers: item.manifest?.remoteConfig?.headers?.map((header) => ({
 				...header,
 				value: '',
-				isStatic: header.value !== ''
+				isStatic: header.value !== '',
+				secretBindingReadonly: hasSecretBinding(header)
 			})),
 			...(item.manifest?.remoteConfig?.hostname
 				? { hostname: item.manifest.remoteConfig?.hostname, url: '' }
 				: {})
 		};
+	}
+
+	function secretBoundFields(fields?: MCPSubField[]) {
+		return (fields ?? [])
+			.filter((field) => hasSecretBinding(field))
+			.map(({ value: _value, ...field }) => ({ ...field, value: '' }));
+	}
+
+	type TemplateDeployManifest = {
+		env?: MCPSubField[];
+		remoteConfig?: {
+			url?: string;
+			headers?: MCPSubField[];
+		};
+	};
+
+	function buildTemplateSecretBindingManifest(
+		form?: LaunchFormData
+	): TemplateDeployManifest | undefined {
+		const env = secretBoundFields(form?.envs);
+		const headers = secretBoundFields(form?.headers);
+		const url = form?.url?.trim();
+		const manifest: TemplateDeployManifest = {};
+		if (env.length > 0) {
+			manifest.env = env;
+		}
+		if (url || headers.length > 0) {
+			manifest.remoteConfig = {
+				...(url ? { url } : {}),
+				...(headers.length > 0 ? { headers } : {})
+			};
+		}
+		return Object.keys(manifest).length > 0 ? manifest : undefined;
 	}
 
 	async function initMultiUserInstanceForm(
@@ -569,10 +630,14 @@
 		let launchHandedOff = false;
 		try {
 			const lf = configureForm as LaunchFormData | undefined;
-			const url = lf?.url?.trim();
 			const aliasToUse = lf?.name?.trim() || getUniqueAlias(entry.manifest.name || '');
+			const manifest = canBindSecretsForTemplate
+				? buildTemplateSecretBindingManifest(lf)
+				: lf?.url?.trim()
+					? { remoteConfig: { url: lf.url.trim() } }
+					: undefined;
 			const serverPayload = {
-				manifest: url ? { remoteConfig: { url } } : {},
+				...(manifest ? { manifest } : {}),
 				alias: aliasToUse
 			};
 			if (workspaceID) {
@@ -926,6 +991,7 @@
 	isNew={!isConfigured}
 	showAlias={shouldShowAlias}
 	configurationTitle={configureFormTitle}
+	secretBindingTargets={canBindSecretsForTemplate ? secretBindingTargets : undefined}
 />
 
 <PageLoading

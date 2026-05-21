@@ -21,6 +21,8 @@
 		targets.find((target) => target.name === field.secretBinding?.name)
 	);
 	const keyOptions = $derived((selectedTarget?.keys ?? []).map((key) => ({ id: key, label: key })));
+	const selectClasses =
+		'bg-base-200 dark:bg-base-300 border border-base-300 dark:border-base-400 w-full shadow-inner';
 
 	function enableSecretBinding() {
 		const firstTarget = targets[0];
@@ -55,7 +57,7 @@
 		>
 		<Select
 			id={`secret-binding-source-${field.key}`}
-			class="text-input-filled bg-base-100 w-full shadow-none"
+			class={selectClasses}
 			options={sourceOptions}
 			selected={field.secretBinding ? 'secret' : 'value'}
 			disabled={readonly}
@@ -80,7 +82,7 @@
 				<label for={`secret-binding-secret-${field.key}`} class="text-sm font-light">Secret</label>
 				<Select
 					id={`secret-binding-secret-${field.key}`}
-					class="text-input-filled bg-base-100 w-full shadow-none"
+					class={selectClasses}
 					options={secretOptions}
 					selected={field.secretBinding.name}
 					disabled={readonly}
@@ -92,7 +94,7 @@
 				<label for={`secret-binding-key-${field.key}`} class="text-sm font-light">Key</label>
 				<Select
 					id={`secret-binding-key-${field.key}`}
-					class="text-input-filled bg-base-100 w-full shadow-none"
+					class={selectClasses}
 					options={keyOptions}
 					selected={field.secretBinding.key}
 					disabled={readonly || keyOptions.length === 0}

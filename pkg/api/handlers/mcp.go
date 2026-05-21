@@ -1511,6 +1511,28 @@ func mergeMCPServerManifests(existing, override types.MCPServerManifest) types.M
 	return existing
 }
 
+func applySecretBindingOverlay(manifest types.MCPServerManifest, overlay types.MCPServerManifest) types.MCPServerManifest {
+	bindingsByEnv := secretBindingsByEnv(overlay.Env)
+	for i := range manifest.Env {
+		if binding := bindingsByEnv[manifest.Env[i].Key]; binding != nil {
+			manifest.Env[i].SecretBinding = binding
+			manifest.Env[i].Value = ""
+		}
+	}
+
+	if manifest.RemoteConfig != nil && overlay.RemoteConfig != nil {
+		bindingsByHeader := secretBindingsByHeader(overlay.RemoteConfig.Headers)
+		for i := range manifest.RemoteConfig.Headers {
+			if binding := bindingsByHeader[manifest.RemoteConfig.Headers[i].Key]; binding != nil {
+				manifest.RemoteConfig.Headers[i].SecretBinding = binding
+				manifest.RemoteConfig.Headers[i].Value = ""
+			}
+		}
+	}
+
+	return manifest
+}
+
 func adminManagedSecretBindingManifest(manifest types.MCPServerManifest, source *types.MCPServerCatalogEntryManifest) types.MCPServerManifest {
 	if source == nil {
 		return manifest
@@ -1660,6 +1682,9 @@ func (m *MCPHandler) CreateServer(req api.Context) error {
 		manifest, err := serverManifestFromCatalogEntryManifest(isAdminOverride, false, catalogEntry.Spec.Manifest, input.MCPServerManifest)
 		if err != nil {
 			return err
+		}
+		if req.UserIsAdmin() && catalogID != "" && !catalogEntry.Spec.Manifest.ServerUserType.IsSingleUser() {
+			manifest = applySecretBindingOverlay(manifest, input.MCPServerManifest)
 		}
 
 		server.Spec.Manifest = manifest
