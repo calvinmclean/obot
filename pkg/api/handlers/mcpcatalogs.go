@@ -352,7 +352,7 @@ func (h *MCPCatalogHandler) CreateEntry(req api.Context) error {
 		return types.NewErrBadRequest("failed to validate entry manifest: %v", err)
 	}
 	// UI-created catalog entries are never git-managed, so secretBinding is forbidden.
-	if err := validation.ValidateSecretBindingsCatalogEntry(manifest, false, h.mcpBackend); err != nil {
+	if err := validation.ValidateSecretBindingsCatalogEntry(manifest, false, false, h.mcpBackend); err != nil {
 		return types.NewErrBadRequest("failed to validate entry manifest: %v", err)
 	}
 	if err := validation.ValidateTemplateReferencesCatalogEntry(manifest); err != nil {
@@ -431,7 +431,7 @@ func (h *MCPCatalogHandler) UpdateEntry(req api.Context) error {
 	}
 	// UI-updated catalog entries are never git-managed at this call site. The
 	// git-sync controller reconciles git-managed entries through a separate path.
-	if err := validation.ValidateSecretBindingsCatalogEntry(manifest, false, h.mcpBackend); err != nil {
+	if err := validation.ValidateSecretBindingsCatalogEntry(manifest, false, false, h.mcpBackend); err != nil {
 		return types.NewErrBadRequest("failed to validate entry manifest: %v", err)
 	}
 	if err := validation.ValidateTemplateReferencesCatalogEntry(manifest); err != nil {
@@ -1774,7 +1774,7 @@ func (h *MCPCatalogHandler) RefreshCompositeComponents(req api.Context) error {
 	}
 	// Preserve the git-managed status of the original entry when re-validating.
 	entryGitManaged := entry.IsGitManaged()
-	if err := validation.ValidateSecretBindingsCatalogEntry(entry.Spec.Manifest, entryGitManaged, h.mcpBackend); err != nil {
+	if err := validation.ValidateSecretBindingsCatalogEntry(entry.Spec.Manifest, entryGitManaged, false, h.mcpBackend); err != nil {
 		return types.NewErrBadRequest("failed to validate entry manifest: %v", err)
 	}
 	if err := validation.ValidateTemplateReferencesCatalogEntry(entry.Spec.Manifest); err != nil {
