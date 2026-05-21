@@ -3,6 +3,7 @@ package mcpserver
 import (
 	"cmp"
 	"crypto/rand"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"maps"
@@ -31,7 +32,23 @@ import (
 
 var log = logger.Package()
 
-const oauthMetadataSyncInterval = time.Hour
+const (
+	oauthMetadataSyncInterval = time.Hour
+
+	// adminSecretBindingsAnnotation records secretBinding fields chosen on the deployed server,
+	// so catalog drift can distinguish local admin config from catalog-owned secretBinding changes.
+	adminSecretBindingsAnnotation = "obot.obot.ai/admin-secret-bindings"
+)
+
+type secretBindingRefs struct {
+	Env     map[string]struct{}
+	Headers map[string]struct{}
+}
+
+type secretBindingRefsAnnotation struct {
+	Env     []string `json:"env,omitempty"`
+	Headers []string `json:"headers,omitempty"`
+}
 
 type Handler struct {
 	gptClient                    *gptscript.GPTScript
@@ -82,7 +99,7 @@ func (h *Handler) DetectDrift(req router.Request, _ router.Response) error {
 		return err
 	}
 
-	drifted, err := ConfigurationHasDrifted(server.Spec.Manifest, entry.Spec.Manifest, h.defaultDenyAllEgress)
+	drifted, err := configurationHasDrifted(server.Spec.Manifest, entry.Spec.Manifest, h.defaultDenyAllEgress, adminSecretBindingRefs(server.Annotations))
 	if err != nil {
 		return err
 	}
@@ -258,6 +275,10 @@ func (h *Handler) DetectK8sSettingsDrift(req router.Request, _ router.Response) 
 // manifest and a catalog entry manifest. It handles the type difference between MCPServerManifest
 // and MCPServerCatalogEntryManifest by comparing only the fields common to both.
 func ConfigurationHasDrifted(serverManifest types.MCPServerManifest, entryManifest types.MCPServerCatalogEntryManifest, defaultDenyAllEgress bool) (bool, error) {
+	return configurationHasDrifted(serverManifest, entryManifest, defaultDenyAllEgress, secretBindingRefs{})
+}
+
+func configurationHasDrifted(serverManifest types.MCPServerManifest, entryManifest types.MCPServerCatalogEntryManifest, defaultDenyAllEgress bool, adminBindings secretBindingRefs) (bool, error) {
 	// Check if runtime types differ
 	if serverManifest.Runtime != entryManifest.Runtime {
 		return true, nil
@@ -273,7 +294,7 @@ func ConfigurationHasDrifted(serverManifest types.MCPServerManifest, entryManife
 	case types.RuntimeContainerized:
 		drifted = containerizedConfigHasDrifted(serverManifest.ContainerizedConfig, entryManifest.ContainerizedConfig, defaultDenyAllEgress)
 	case types.RuntimeRemote:
-		drifted = remoteConfigHasDrifted(serverManifest.RemoteConfig, entryManifest.RemoteConfig)
+		drifted = remoteConfigHasDriftedWithAdminBindings(serverManifest.RemoteConfig, entryManifest.RemoteConfig, adminBindings.Headers)
 	case types.RuntimeComposite:
 		var err error
 		drifted, err = compositeConfigHasDrifted(serverManifest.CompositeConfig, entryManifest.CompositeConfig, defaultDenyAllEgress)
@@ -293,8 +314,11 @@ func ConfigurationHasDrifted(serverManifest types.MCPServerManifest, entryManife
 		return true, nil
 	}
 
-	// Check environment
-	return !slicesEqualIgnoreOrderDeep(serverManifest.Env, entryManifest.Env), nil
+	// Check environment. Secret bindings added to the deployed server are administrator
+	// configuration, not source catalog drift, unless the catalog entry itself pins a binding.
+	return fieldSlicesHaveDrifted(serverManifest.Env, entryManifest.Env, func(serverField, entryField types.MCPEnv) bool {
+		return mcpEnvMatchesCatalog(serverField, entryField, adminBindings.Env)
+	}), nil
 }
 
 func multiUserConfigHasDrifted(serverConfig, entryConfig *types.MultiUserConfig) bool {
@@ -304,7 +328,9 @@ func multiUserConfigHasDrifted(serverConfig, entryConfig *types.MultiUserConfig)
 	if serverConfig == nil || entryConfig == nil {
 		return true
 	}
-	return !slicesEqualIgnoreOrderDeep(serverConfig.UserDefinedHeaders, entryConfig.UserDefinedHeaders)
+	return fieldSlicesHaveDrifted(serverConfig.UserDefinedHeaders, entryConfig.UserDefinedHeaders, func(serverField, entryField types.MCPHeader) bool {
+		return mcpHeaderMatchesCatalog(serverField, entryField, nil)
+	})
 }
 
 // uvxConfigHasDrifted checks if UVX configuration has drifted
@@ -361,6 +387,10 @@ func containerizedConfigHasDrifted(serverConfig, entryConfig *types.Containerize
 
 // remoteConfigHasDrifted checks if remote configuration has drifted
 func remoteConfigHasDrifted(serverConfig *types.RemoteRuntimeConfig, entryConfig *types.RemoteCatalogConfig) bool {
+	return remoteConfigHasDriftedWithAdminBindings(serverConfig, entryConfig, nil)
+}
+
+func remoteConfigHasDriftedWithAdminBindings(serverConfig *types.RemoteRuntimeConfig, entryConfig *types.RemoteCatalogConfig, adminBindings map[string]struct{}) bool {
 	if serverConfig == nil && entryConfig == nil {
 		return false
 	}
@@ -382,7 +412,81 @@ func remoteConfigHasDrifted(serverConfig *types.RemoteRuntimeConfig, entryConfig
 	}
 
 	// Check if headers have drifted
-	return !slicesEqualIgnoreOrderDeep(serverConfig.Headers, entryConfig.Headers)
+	return fieldSlicesHaveDrifted(serverConfig.Headers, entryConfig.Headers, func(serverField, entryField types.MCPHeader) bool {
+		return mcpHeaderMatchesCatalog(serverField, entryField, adminBindings)
+	})
+}
+
+func fieldSlicesHaveDrifted[T any](serverFields, entryFields []T, matches func(T, T) bool) bool {
+	if len(serverFields) != len(entryFields) {
+		return true
+	}
+
+	used := make([]bool, len(entryFields))
+	for _, serverField := range serverFields {
+		found := false
+		for i, entryField := range entryFields {
+			if used[i] || !matches(serverField, entryField) {
+				continue
+			}
+			used[i] = true
+			found = true
+			break
+		}
+		if !found {
+			return true
+		}
+	}
+
+	return false
+}
+
+func mcpEnvMatchesCatalog(serverField, entryField types.MCPEnv, adminBindings map[string]struct{}) bool {
+	serverField.SecretBinding = catalogComparableSecretBinding(serverField.Key, serverField.SecretBinding, entryField.SecretBinding, adminBindings)
+	return reflect.DeepEqual(serverField, entryField)
+}
+
+func mcpHeaderMatchesCatalog(serverField, entryField types.MCPHeader, adminBindings map[string]struct{}) bool {
+	serverField.SecretBinding = catalogComparableSecretBinding(serverField.Key, serverField.SecretBinding, entryField.SecretBinding, adminBindings)
+	return reflect.DeepEqual(serverField, entryField)
+}
+
+func catalogComparableSecretBinding(fieldKey string, serverBinding, entryBinding *types.MCPSecretBinding, adminBindings map[string]struct{}) *types.MCPSecretBinding {
+	if entryBinding == nil && adminBindingField(fieldKey, adminBindings) {
+		return nil
+	}
+	return serverBinding
+}
+
+func adminBindingField(fieldKey string, adminBindings map[string]struct{}) bool {
+	if adminBindings == nil {
+		return false
+	}
+	_, ok := adminBindings[fieldKey]
+	return ok
+}
+
+func adminSecretBindingRefs(annotations map[string]string) secretBindingRefs {
+	if annotations == nil || annotations[adminSecretBindingsAnnotation] == "" {
+		return secretBindingRefs{}
+	}
+
+	var annotation secretBindingRefsAnnotation
+	if err := json.Unmarshal([]byte(annotations[adminSecretBindingsAnnotation]), &annotation); err != nil {
+		return secretBindingRefs{}
+	}
+
+	refs := secretBindingRefs{
+		Env:     make(map[string]struct{}, len(annotation.Env)),
+		Headers: make(map[string]struct{}, len(annotation.Headers)),
+	}
+	for _, key := range annotation.Env {
+		refs.Env[key] = struct{}{}
+	}
+	for _, key := range annotation.Headers {
+		refs.Headers[key] = struct{}{}
+	}
+	return refs
 }
 
 func slicesEqualIgnoreOrderDeep[T any](a, b []T) bool {

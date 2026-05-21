@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"maps"
@@ -35,7 +36,18 @@ import (
 
 var envVarRegex = regexp.MustCompile(`\${([^}]+)}`)
 
-const requestTimeUpdateInterval = 15 * time.Minute
+const (
+	requestTimeUpdateInterval = 15 * time.Minute
+
+	// adminSecretBindingsAnnotation records secretBinding fields chosen on the deployed server,
+	// so catalog drift can distinguish local admin config from catalog-owned secretBinding changes.
+	adminSecretBindingsAnnotation = "obot.obot.ai/admin-secret-bindings"
+)
+
+type secretBindingRefsAnnotation struct {
+	Env     []string `json:"env,omitempty"`
+	Headers []string `json:"headers,omitempty"`
+}
 
 // MCPOAuthChecker will check the OAuth status for an MCP server. This interface breaks an import cycle.
 type MCPOAuthChecker interface {
@@ -1563,6 +1575,40 @@ func adminManagedSecretBindingManifest(manifest types.MCPServerManifest, source 
 	return result
 }
 
+func setAdminSecretBindingAnnotation(server *v1.MCPServer, source *types.MCPServerCatalogEntryManifest) error {
+	refs := adminManagedSecretBindingRefs(server.Spec.Manifest, source)
+	if len(refs.Env) == 0 && len(refs.Headers) == 0 {
+		delete(server.Annotations, adminSecretBindingsAnnotation)
+		return nil
+	}
+
+	slices.Sort(refs.Env)
+	slices.Sort(refs.Headers)
+	data, err := json.Marshal(refs)
+	if err != nil {
+		return err
+	}
+	if server.Annotations == nil {
+		server.Annotations = make(map[string]string, 1)
+	}
+	server.Annotations[adminSecretBindingsAnnotation] = string(data)
+	return nil
+}
+
+func adminManagedSecretBindingRefs(manifest types.MCPServerManifest, source *types.MCPServerCatalogEntryManifest) secretBindingRefsAnnotation {
+	adminManaged := adminManagedSecretBindingManifest(manifest, source)
+	refs := secretBindingRefsAnnotation{}
+	for _, env := range adminManaged.Env {
+		refs.Env = append(refs.Env, env.Key)
+	}
+	if adminManaged.RemoteConfig != nil {
+		for _, header := range adminManaged.RemoteConfig.Headers {
+			refs.Headers = append(refs.Headers, header.Key)
+		}
+	}
+	return refs
+}
+
 func secretBindingsByEnv(fields []types.MCPEnv) map[string]*types.MCPSecretBinding {
 	bindings := make(map[string]*types.MCPSecretBinding, len(fields))
 	for _, field := range fields {
@@ -1720,6 +1766,11 @@ func (m *MCPHandler) CreateServer(req api.Context) error {
 	if err := validation.ValidateTemplateReferences(server.Spec.Manifest); err != nil {
 		return types.NewErrBadRequest("validation failed: %v", err)
 	}
+	if adminManagedSecretBindings {
+		if err := setAdminSecretBindingAnnotation(&server, sourceCatalogEntryManifest); err != nil {
+			return err
+		}
+	}
 	if err := req.Create(&server); err != nil {
 		return err
 	}
@@ -1850,6 +1901,11 @@ func (m *MCPHandler) UpdateServer(req api.Context) error {
 
 		existing.Spec.Manifest = updated
 		addExtractedEnvVars(&existing)
+		if adminManagedSecretBindings {
+			if err := setAdminSecretBindingAnnotation(&existing, sourceCatalogEntryManifest); err != nil {
+				return err
+			}
+		}
 		return req.Update(&existing)
 	}); err != nil {
 		return err

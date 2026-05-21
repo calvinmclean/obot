@@ -749,6 +749,40 @@ func TestAdminManagedSecretBindingManifestNoSourceValidatesAllBindings(t *testin
 	assert.Equal(t, manifest, result)
 }
 
+func TestSetAdminSecretBindingAnnotationRecordsOnlyAdminOwnedBindings(t *testing.T) {
+	sourceBinding := &types.MCPSecretBinding{Name: "source-secret", Key: "token"}
+	adminBinding := &types.MCPSecretBinding{Name: "admin-secret", Key: "token"}
+	server := &v1.MCPServer{
+		Spec: v1.MCPServerSpec{Manifest: types.MCPServerManifest{
+			Runtime: types.RuntimeRemote,
+			Env: []types.MCPEnv{
+				{MCPHeader: types.MCPHeader{Key: "PINNED_ENV", SecretBinding: sourceBinding}},
+				{MCPHeader: types.MCPHeader{Key: "ADMIN_ENV", SecretBinding: adminBinding}},
+			},
+			RemoteConfig: &types.RemoteRuntimeConfig{Headers: []types.MCPHeader{
+				{Key: "Pinned-Header", SecretBinding: sourceBinding},
+				{Key: "Admin-Header", SecretBinding: adminBinding},
+			}},
+		}},
+	}
+	source := &types.MCPServerCatalogEntryManifest{
+		Runtime: types.RuntimeRemote,
+		Env: []types.MCPEnv{
+			{MCPHeader: types.MCPHeader{Key: "PINNED_ENV", SecretBinding: sourceBinding}},
+		},
+		RemoteConfig: &types.RemoteCatalogConfig{Headers: []types.MCPHeader{
+			{Key: "Pinned-Header", SecretBinding: sourceBinding},
+		}},
+	}
+
+	require.NoError(t, setAdminSecretBindingAnnotation(server, source))
+
+	var refs secretBindingRefsAnnotation
+	require.NoError(t, json.Unmarshal([]byte(server.Annotations[adminSecretBindingsAnnotation]), &refs))
+	assert.Equal(t, []string{"ADMIN_ENV"}, refs.Env)
+	assert.Equal(t, []string{"Admin-Header"}, refs.Headers)
+}
+
 func TestApplySecretBindingOverlayOnlyMatchesExistingFields(t *testing.T) {
 	binding := &types.MCPSecretBinding{Name: "allowed-secret", Key: "token"}
 	manifest := types.MCPServerManifest{
