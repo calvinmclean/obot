@@ -9,18 +9,41 @@
 	}
 
 	let { field, targets, readonly }: Props = $props();
+	type SecretBindingOption = { id: string; label: string; disabled?: boolean };
 
 	const sourceOptions = $derived([
 		{ id: 'value', label: 'Manual Value' },
 		{ id: 'secret', label: 'Kubernetes Secret', disabled: targets.length === 0 }
 	]);
-	const secretOptions = $derived(
-		targets.map((target) => ({ id: target.name, label: target.name }))
-	);
+	const secretOptions = $derived.by(() => {
+		const options: SecretBindingOption[] = targets.map((target) => ({
+			id: target.name,
+			label: target.name
+		}));
+		const boundSecret = field.secretBinding?.name;
+
+		if (boundSecret && !targets.some((target) => target.name === boundSecret)) {
+			options.push({ id: boundSecret, label: `${boundSecret} (not available)`, disabled: true });
+		}
+
+		return options;
+	});
 	const selectedTarget = $derived(
 		targets.find((target) => target.name === field.secretBinding?.name)
 	);
-	const keyOptions = $derived((selectedTarget?.keys ?? []).map((key) => ({ id: key, label: key })));
+	const keyOptions = $derived.by(() => {
+		const options: SecretBindingOption[] = (selectedTarget?.keys ?? []).map((key) => ({
+			id: key,
+			label: key
+		}));
+		const boundKey = field.secretBinding?.key;
+
+		if (boundKey && !options.some((option) => option.id === boundKey)) {
+			options.push({ id: boundKey, label: `${boundKey} (not available)`, disabled: true });
+		}
+
+		return options;
+	});
 	const selectClasses =
 		'bg-base-200 dark:bg-base-300 border border-base-300 dark:border-base-400 w-full shadow-inner';
 
