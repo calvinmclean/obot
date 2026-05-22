@@ -1545,26 +1545,35 @@ func applySecretBindingOverlay(manifest types.MCPServerManifest, overlay types.M
 	return manifest
 }
 
-func adminManagedSecretBindingManifest(manifest types.MCPServerManifest, source *types.MCPServerCatalogEntryManifest) types.MCPServerManifest {
-	if source == nil {
-		return manifest
+func adminManagedSecretBindingManifest(manifest types.MCPServerManifest, source *types.MCPServerCatalogEntryManifest, existing *types.MCPServerManifest, annotations map[string]string) types.MCPServerManifest {
+	sourceEnv := make(map[string]*types.MCPSecretBinding)
+	sourceHeaders := make(map[string]*types.MCPSecretBinding)
+	if source != nil {
+		sourceEnv = secretBindingsByEnv(source.Env)
+		if source.RemoteConfig != nil {
+			sourceHeaders = secretBindingsByHeader(source.RemoteConfig.Headers)
+		}
 	}
 
-	sourceEnv := secretBindingsByEnv(source.Env)
-	sourceHeaders := map[string]*types.MCPSecretBinding{}
-	if source.RemoteConfig != nil {
-		sourceHeaders = secretBindingsByHeader(source.RemoteConfig.Headers)
+	existingEnv := make(map[string]*types.MCPSecretBinding)
+	existingHeaders := make(map[string]*types.MCPSecretBinding)
+	if existing != nil {
+		existingEnv = secretBindingsByEnv(existing.Env)
+		if existing.RemoteConfig != nil {
+			existingHeaders = secretBindingsByHeader(existing.RemoteConfig.Headers)
+		}
 	}
 
+	adminRefs := readAdminSecretBindingAnnotation(annotations)
 	result := types.MCPServerManifest{Runtime: manifest.Runtime}
 	for _, env := range manifest.Env {
-		if env.SecretBinding != nil && !sameSecretBinding(sourceEnv[env.Key], env.SecretBinding) {
+		if adminManagedSecretBinding(env.Key, env.SecretBinding, sourceEnv[env.Key], existingEnv[env.Key], source != nil, adminRefs.Env) {
 			result.Env = append(result.Env, env)
 		}
 	}
 	if manifest.RemoteConfig != nil {
 		for _, header := range manifest.RemoteConfig.Headers {
-			if header.SecretBinding != nil && !sameSecretBinding(sourceHeaders[header.Key], header.SecretBinding) {
+			if adminManagedSecretBinding(header.Key, header.SecretBinding, sourceHeaders[header.Key], existingHeaders[header.Key], source != nil, adminRefs.Headers) {
 				if result.RemoteConfig == nil {
 					result.RemoteConfig = &types.RemoteRuntimeConfig{}
 				}
@@ -1575,8 +1584,24 @@ func adminManagedSecretBindingManifest(manifest types.MCPServerManifest, source 
 	return result
 }
 
-func setAdminSecretBindingAnnotation(server *v1.MCPServer, source *types.MCPServerCatalogEntryManifest) error {
-	refs := adminManagedSecretBindingRefs(server.Spec.Manifest, source)
+func adminManagedSecretBinding(key string, binding, sourceBinding, existingBinding *types.MCPSecretBinding, hasSource bool, annotated []string) bool {
+	if binding == nil {
+		return false
+	}
+	if sameSecretBinding(sourceBinding, binding) {
+		return false
+	}
+	if slices.Contains(annotated, key) {
+		return true
+	}
+	if hasSource && sameSecretBinding(existingBinding, binding) {
+		return false
+	}
+	return true
+}
+
+func setAdminSecretBindingAnnotation(server *v1.MCPServer, source *types.MCPServerCatalogEntryManifest, existing *types.MCPServerManifest, annotations map[string]string) error {
+	refs := adminManagedSecretBindingRefs(server.Spec.Manifest, source, existing, annotations)
 	if len(refs.Env) == 0 && len(refs.Headers) == 0 {
 		delete(server.Annotations, adminSecretBindingsAnnotation)
 		return nil
@@ -1595,8 +1620,8 @@ func setAdminSecretBindingAnnotation(server *v1.MCPServer, source *types.MCPServ
 	return nil
 }
 
-func adminManagedSecretBindingRefs(manifest types.MCPServerManifest, source *types.MCPServerCatalogEntryManifest) secretBindingRefsAnnotation {
-	adminManaged := adminManagedSecretBindingManifest(manifest, source)
+func adminManagedSecretBindingRefs(manifest types.MCPServerManifest, source *types.MCPServerCatalogEntryManifest, existing *types.MCPServerManifest, annotations map[string]string) secretBindingRefsAnnotation {
+	adminManaged := adminManagedSecretBindingManifest(manifest, source, existing, annotations)
 	refs := secretBindingRefsAnnotation{}
 	for _, env := range adminManaged.Env {
 		refs.Env = append(refs.Env, env.Key)
@@ -1606,6 +1631,16 @@ func adminManagedSecretBindingRefs(manifest types.MCPServerManifest, source *typ
 			refs.Headers = append(refs.Headers, header.Key)
 		}
 	}
+	return refs
+}
+
+func readAdminSecretBindingAnnotation(annotations map[string]string) secretBindingRefsAnnotation {
+	if annotations == nil || annotations[adminSecretBindingsAnnotation] == "" {
+		return secretBindingRefsAnnotation{}
+	}
+
+	var refs secretBindingRefsAnnotation
+	_ = json.Unmarshal([]byte(annotations[adminSecretBindingsAnnotation]), &refs)
 	return refs
 }
 
@@ -1752,7 +1787,7 @@ func (m *MCPHandler) CreateServer(req api.Context) error {
 		return types.NewErrBadRequest("validation failed: %v", err)
 	}
 	if adminManagedSecretBindings {
-		manifest := adminManagedSecretBindingManifest(server.Spec.Manifest, sourceCatalogEntryManifest)
+		manifest := adminManagedSecretBindingManifest(server.Spec.Manifest, sourceCatalogEntryManifest, nil, nil)
 		if err := mcp.ValidateAllowedSecretBindings(req.Context(), req.LocalK8sClient, req.ObotNamespace, manifest, m.secretBindingAllowedLabel); err != nil {
 			return types.NewErrBadRequest("validation failed: %v", err)
 		}
@@ -1767,7 +1802,7 @@ func (m *MCPHandler) CreateServer(req api.Context) error {
 		return types.NewErrBadRequest("validation failed: %v", err)
 	}
 	if adminManagedSecretBindings {
-		if err := setAdminSecretBindingAnnotation(&server, sourceCatalogEntryManifest); err != nil {
+		if err := setAdminSecretBindingAnnotation(&server, sourceCatalogEntryManifest, nil, nil); err != nil {
 			return err
 		}
 	}
@@ -1877,7 +1912,7 @@ func (m *MCPHandler) UpdateServer(req api.Context) error {
 		return types.NewErrBadRequest("validation failed: %v", err)
 	}
 	if adminManagedSecretBindings {
-		manifest := adminManagedSecretBindingManifest(updated, sourceCatalogEntryManifest)
+		manifest := adminManagedSecretBindingManifest(updated, sourceCatalogEntryManifest, &existing.Spec.Manifest, existing.Annotations)
 		if err := mcp.ValidateAllowedSecretBindings(req.Context(), req.LocalK8sClient, req.ObotNamespace, manifest, m.secretBindingAllowedLabel); err != nil {
 			return types.NewErrBadRequest("validation failed: %v", err)
 		}
@@ -1899,10 +1934,12 @@ func (m *MCPHandler) UpdateServer(req api.Context) error {
 			return types.NewErrNotFound("MCP server not found")
 		}
 
+		previousManifest := existing.Spec.Manifest
+		previousAnnotations := maps.Clone(existing.Annotations)
 		existing.Spec.Manifest = updated
 		addExtractedEnvVars(&existing)
 		if adminManagedSecretBindings {
-			if err := setAdminSecretBindingAnnotation(&existing, sourceCatalogEntryManifest); err != nil {
+			if err := setAdminSecretBindingAnnotation(&existing, sourceCatalogEntryManifest, &previousManifest, previousAnnotations); err != nil {
 				return err
 			}
 		}

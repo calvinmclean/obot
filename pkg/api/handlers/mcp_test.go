@@ -720,7 +720,7 @@ func TestAdminManagedSecretBindingManifest(t *testing.T) {
 		},
 	}
 
-	result := adminManagedSecretBindingManifest(manifest, source)
+	result := adminManagedSecretBindingManifest(manifest, source, nil, nil)
 
 	assert.Equal(t, types.RuntimeRemote, result.Runtime)
 	assert.Equal(t, []types.MCPEnv{
@@ -744,9 +744,41 @@ func TestAdminManagedSecretBindingManifestNoSourceValidatesAllBindings(t *testin
 		},
 	}
 
-	result := adminManagedSecretBindingManifest(manifest, nil)
+	result := adminManagedSecretBindingManifest(manifest, nil, nil, nil)
 
-	assert.Equal(t, manifest, result)
+	assert.Equal(t, types.MCPServerManifest{
+		Runtime: types.RuntimeContainerized,
+		Env: []types.MCPEnv{
+			{MCPHeader: types.MCPHeader{Key: "ADMIN_ENV", SecretBinding: binding}},
+		},
+	}, result)
+}
+
+func TestAdminManagedSecretBindingManifestSkipsStaleCatalogOwnedBinding(t *testing.T) {
+	catalogBinding := &types.MCPSecretBinding{Name: "catalog-secret", Key: "token"}
+	existing := types.MCPServerManifest{
+		Runtime: types.RuntimeRemote,
+		Env: []types.MCPEnv{{MCPHeader: types.MCPHeader{
+			Key:           "API_TOKEN",
+			SecretBinding: catalogBinding,
+		}}},
+		RemoteConfig: &types.RemoteRuntimeConfig{Headers: []types.MCPHeader{{
+			Key:           "Authorization",
+			SecretBinding: catalogBinding,
+		}}},
+	}
+	updated := existing
+	source := &types.MCPServerCatalogEntryManifest{
+		Runtime:        types.RuntimeRemote,
+		Env:            []types.MCPEnv{{MCPHeader: types.MCPHeader{Key: "API_TOKEN"}}},
+		RemoteConfig:   &types.RemoteCatalogConfig{Headers: []types.MCPHeader{{Key: "Authorization"}}},
+		ServerUserType: types.ServerUserTypeMultiUser,
+	}
+
+	result := adminManagedSecretBindingManifest(updated, source, &existing, nil)
+
+	assert.Empty(t, result.Env)
+	assert.Nil(t, result.RemoteConfig)
 }
 
 func TestSetAdminSecretBindingAnnotationRecordsOnlyAdminOwnedBindings(t *testing.T) {
@@ -775,7 +807,7 @@ func TestSetAdminSecretBindingAnnotationRecordsOnlyAdminOwnedBindings(t *testing
 		}},
 	}
 
-	require.NoError(t, setAdminSecretBindingAnnotation(server, source))
+	require.NoError(t, setAdminSecretBindingAnnotation(server, source, nil, nil))
 
 	var refs secretBindingRefsAnnotation
 	require.NoError(t, json.Unmarshal([]byte(server.Annotations[adminSecretBindingsAnnotation]), &refs))
