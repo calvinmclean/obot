@@ -809,8 +809,8 @@ func TestSetAdminSecretBindingAnnotationRecordsOnlyAdminOwnedBindings(t *testing
 
 	require.NoError(t, setAdminSecretBindingAnnotation(server, source, nil, nil))
 
-	var refs secretBindingRefsAnnotation
-	require.NoError(t, json.Unmarshal([]byte(server.Annotations[adminSecretBindingsAnnotation]), &refs))
+	var refs mcp.SecretBindingRefsAnnotation
+	require.NoError(t, json.Unmarshal([]byte(server.Annotations[mcp.AdminSecretBindingsAnnotation]), &refs))
 	assert.Equal(t, []string{"ADMIN_ENV"}, refs.Env)
 	assert.Equal(t, []string{"Admin-Header"}, refs.Headers)
 }

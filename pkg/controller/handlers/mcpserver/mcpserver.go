@@ -34,21 +34,7 @@ var log = logger.Package()
 
 const (
 	oauthMetadataSyncInterval = time.Hour
-
-	// adminSecretBindingsAnnotation records secretBinding fields chosen on the deployed server,
-	// so catalog drift can distinguish local admin config from catalog-owned secretBinding changes.
-	adminSecretBindingsAnnotation = "obot.obot.ai/admin-secret-bindings"
 )
-
-type secretBindingRefs struct {
-	Env     map[string]struct{}
-	Headers map[string]struct{}
-}
-
-type secretBindingRefsAnnotation struct {
-	Env     []string `json:"env,omitempty"`
-	Headers []string `json:"headers,omitempty"`
-}
 
 type Handler struct {
 	gptClient                    *gptscript.GPTScript
@@ -275,10 +261,10 @@ func (h *Handler) DetectK8sSettingsDrift(req router.Request, _ router.Response) 
 // manifest and a catalog entry manifest. It handles the type difference between MCPServerManifest
 // and MCPServerCatalogEntryManifest by comparing only the fields common to both.
 func ConfigurationHasDrifted(serverManifest types.MCPServerManifest, entryManifest types.MCPServerCatalogEntryManifest, defaultDenyAllEgress bool) (bool, error) {
-	return configurationHasDrifted(serverManifest, entryManifest, defaultDenyAllEgress, secretBindingRefs{})
+	return configurationHasDrifted(serverManifest, entryManifest, defaultDenyAllEgress, mcp.SecretBindingRefs{})
 }
 
-func configurationHasDrifted(serverManifest types.MCPServerManifest, entryManifest types.MCPServerCatalogEntryManifest, defaultDenyAllEgress bool, adminBindings secretBindingRefs) (bool, error) {
+func configurationHasDrifted(serverManifest types.MCPServerManifest, entryManifest types.MCPServerCatalogEntryManifest, defaultDenyAllEgress bool, adminBindings mcp.SecretBindingRefs) (bool, error) {
 	// Check if runtime types differ
 	if serverManifest.Runtime != entryManifest.Runtime {
 		return true, nil
@@ -466,17 +452,17 @@ func adminBindingField(fieldKey string, adminBindings map[string]struct{}) bool 
 	return ok
 }
 
-func adminSecretBindingRefs(annotations map[string]string) secretBindingRefs {
-	if annotations == nil || annotations[adminSecretBindingsAnnotation] == "" {
-		return secretBindingRefs{}
+func adminSecretBindingRefs(annotations map[string]string) mcp.SecretBindingRefs {
+	if annotations == nil || annotations[mcp.AdminSecretBindingsAnnotation] == "" {
+		return mcp.SecretBindingRefs{}
 	}
 
-	var annotation secretBindingRefsAnnotation
-	if err := json.Unmarshal([]byte(annotations[adminSecretBindingsAnnotation]), &annotation); err != nil {
-		return secretBindingRefs{}
+	var annotation mcp.SecretBindingRefsAnnotation
+	if err := json.Unmarshal([]byte(annotations[mcp.AdminSecretBindingsAnnotation]), &annotation); err != nil {
+		return mcp.SecretBindingRefs{}
 	}
 
-	refs := secretBindingRefs{
+	refs := mcp.SecretBindingRefs{
 		Env:     make(map[string]struct{}, len(annotation.Env)),
 		Headers: make(map[string]struct{}, len(annotation.Headers)),
 	}

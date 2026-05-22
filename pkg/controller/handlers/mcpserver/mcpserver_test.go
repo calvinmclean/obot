@@ -8,6 +8,7 @@ import (
 
 	"github.com/obot-platform/nah/pkg/router"
 	"github.com/obot-platform/obot/apiclient/types"
+	"github.com/obot-platform/obot/pkg/mcp"
 	v1 "github.com/obot-platform/obot/pkg/storage/apis/obot.obot.ai/v1"
 	storagescheme "github.com/obot-platform/obot/pkg/storage/scheme"
 	"github.com/stretchr/testify/assert"
@@ -22,7 +23,7 @@ func TestConfigurationHasDrifted(t *testing.T) {
 		name                   string
 		serverManifest         types.MCPServerManifest
 		entryManifest          types.MCPServerCatalogEntryManifest
-		adminSecretBindingRefs secretBindingRefs
+		adminSecretBindingRefs mcp.SecretBindingRefs
 		expectedDrift          bool
 		expectedError          bool
 	}{
@@ -386,7 +387,7 @@ func TestConfigurationHasDrifted(t *testing.T) {
 		},
 		{
 			name: "no drift - multi-user deployed env secret binding is configuration",
-			adminSecretBindingRefs: secretBindingRefs{
+			adminSecretBindingRefs: mcp.SecretBindingRefs{
 				Env: map[string]struct{}{"API_KEY": {}},
 			},
 			serverManifest: types.MCPServerManifest{
@@ -500,7 +501,7 @@ func TestConfigurationHasDrifted(t *testing.T) {
 		},
 		{
 			name: "no drift - multi-user deployed remote header secret binding is configuration",
-			adminSecretBindingRefs: secretBindingRefs{
+			adminSecretBindingRefs: mcp.SecretBindingRefs{
 				Headers: map[string]struct{}{"Authorization": {}},
 			},
 			serverManifest: types.MCPServerManifest{

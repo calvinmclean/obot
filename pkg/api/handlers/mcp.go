@@ -36,18 +36,7 @@ import (
 
 var envVarRegex = regexp.MustCompile(`\${([^}]+)}`)
 
-const (
-	requestTimeUpdateInterval = 15 * time.Minute
-
-	// adminSecretBindingsAnnotation records secretBinding fields chosen on the deployed server,
-	// so catalog drift can distinguish local admin config from catalog-owned secretBinding changes.
-	adminSecretBindingsAnnotation = "obot.obot.ai/admin-secret-bindings"
-)
-
-type secretBindingRefsAnnotation struct {
-	Env     []string `json:"env,omitempty"`
-	Headers []string `json:"headers,omitempty"`
-}
+const requestTimeUpdateInterval = 15 * time.Minute
 
 // MCPOAuthChecker will check the OAuth status for an MCP server. This interface breaks an import cycle.
 type MCPOAuthChecker interface {
@@ -1603,7 +1592,7 @@ func adminManagedSecretBinding(key string, binding, sourceBinding, existingBindi
 func setAdminSecretBindingAnnotation(server *v1.MCPServer, source *types.MCPServerCatalogEntryManifest, existing *types.MCPServerManifest, annotations map[string]string) error {
 	refs := adminManagedSecretBindingRefs(server.Spec.Manifest, source, existing, annotations)
 	if len(refs.Env) == 0 && len(refs.Headers) == 0 {
-		delete(server.Annotations, adminSecretBindingsAnnotation)
+		delete(server.Annotations, mcp.AdminSecretBindingsAnnotation)
 		return nil
 	}
 
@@ -1616,13 +1605,13 @@ func setAdminSecretBindingAnnotation(server *v1.MCPServer, source *types.MCPServ
 	if server.Annotations == nil {
 		server.Annotations = make(map[string]string, 1)
 	}
-	server.Annotations[adminSecretBindingsAnnotation] = string(data)
+	server.Annotations[mcp.AdminSecretBindingsAnnotation] = string(data)
 	return nil
 }
 
-func adminManagedSecretBindingRefs(manifest types.MCPServerManifest, source *types.MCPServerCatalogEntryManifest, existing *types.MCPServerManifest, annotations map[string]string) secretBindingRefsAnnotation {
+func adminManagedSecretBindingRefs(manifest types.MCPServerManifest, source *types.MCPServerCatalogEntryManifest, existing *types.MCPServerManifest, annotations map[string]string) mcp.SecretBindingRefsAnnotation {
 	adminManaged := adminManagedSecretBindingManifest(manifest, source, existing, annotations)
-	refs := secretBindingRefsAnnotation{}
+	refs := mcp.SecretBindingRefsAnnotation{}
 	for _, env := range adminManaged.Env {
 		refs.Env = append(refs.Env, env.Key)
 	}
@@ -1634,13 +1623,13 @@ func adminManagedSecretBindingRefs(manifest types.MCPServerManifest, source *typ
 	return refs
 }
 
-func readAdminSecretBindingAnnotation(annotations map[string]string) secretBindingRefsAnnotation {
-	if annotations == nil || annotations[adminSecretBindingsAnnotation] == "" {
-		return secretBindingRefsAnnotation{}
+func readAdminSecretBindingAnnotation(annotations map[string]string) mcp.SecretBindingRefsAnnotation {
+	if annotations == nil || annotations[mcp.AdminSecretBindingsAnnotation] == "" {
+		return mcp.SecretBindingRefsAnnotation{}
 	}
 
-	var refs secretBindingRefsAnnotation
-	_ = json.Unmarshal([]byte(annotations[adminSecretBindingsAnnotation]), &refs)
+	var refs mcp.SecretBindingRefsAnnotation
+	_ = json.Unmarshal([]byte(annotations[mcp.AdminSecretBindingsAnnotation]), &refs)
 	return refs
 }
 
