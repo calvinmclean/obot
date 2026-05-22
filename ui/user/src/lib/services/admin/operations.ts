@@ -102,9 +102,9 @@ import { MCPCompositeDeletionDependencyError } from './types';
 type ItemsResponse<T> = { items: T[] | null };
 type RequestOptions = { fetch?: Fetcher; dontLogErrors?: boolean; signal?: AbortSignal };
 
-export async function listMCPSecretBindingTargets(opts?: {
-	fetch?: Fetcher;
-}): Promise<MCPAllowedSecretBindingTarget[]> {
+export async function listMCPSecretBindingTargets(
+	opts?: RequestOptions
+): Promise<MCPAllowedSecretBindingTarget[]> {
 	const response = (await doGet(
 		'/mcp-secret-bindings/secrets',
 		opts

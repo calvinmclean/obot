@@ -17,7 +17,7 @@
 		hasSecretBinding,
 		isKubernetesRuntimeBackend
 	} from '$lib/services/user/mcp';
-	import { version } from '$lib/stores';
+	import { errors, version } from '$lib/stores';
 	import PageLoading from '../PageLoading.svelte';
 	import CatalogConfigureForm, {
 		type CompositeLaunchFormData,
@@ -132,7 +132,14 @@
 			return;
 		}
 		if (initServer.mcpCatalogID && isMultiUserServer(initServer)) {
-			secretBindingTargets = await AdminService.listMCPSecretBindingTargets();
+			try {
+				secretBindingTargets = await AdminService.listMCPSecretBindingTargets({
+					dontLogErrors: true
+				});
+			} catch (err) {
+				errors.append(`Failed to load Kubernetes Secrets for binding: ${err}`);
+				secretBindingTargets = [];
+			}
 		} else {
 			secretBindingTargets = [];
 		}

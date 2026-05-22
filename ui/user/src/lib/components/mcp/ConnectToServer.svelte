@@ -19,7 +19,7 @@
 		hasEditableConfiguration,
 		hasSecretBinding
 	} from '$lib/services/user/mcp';
-	import { version } from '$lib/stores';
+	import { errors, version } from '$lib/stores';
 	import CopyButton from '../CopyButton.svelte';
 	import PageLoading from '../PageLoading.svelte';
 	import ResponsiveDialog from '../ResponsiveDialog.svelte';
@@ -102,17 +102,17 @@
 	let saving = $state(false);
 
 	$effect(() => {
-		if (
-			!canBindSecretsForTemplate ||
-			loadingSecretBindingTargets ||
-			secretBindingTargetsLoaded
-		) {
+		if (!canBindSecretsForTemplate || loadingSecretBindingTargets || secretBindingTargetsLoaded) {
 			return;
 		}
 		loadingSecretBindingTargets = true;
-		AdminService.listMCPSecretBindingTargets()
+		AdminService.listMCPSecretBindingTargets({ dontLogErrors: true })
 			.then((targets) => {
 				secretBindingTargets = targets;
+			})
+			.catch((err) => {
+				errors.append(`Failed to load Kubernetes Secrets for binding: ${err}`);
+				secretBindingTargets = [];
 			})
 			.finally(() => {
 				secretBindingTargetsLoaded = true;
