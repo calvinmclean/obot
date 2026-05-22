@@ -624,6 +624,7 @@ export interface MCPCatalogEntryServerManifest {
 	};
 
 	runtime: Runtime;
+	serverUserType: 'singleUser' | 'multiUser';
 	uvxConfig?: UVXRuntimeConfig;
 	npxConfig?: NPXRuntimeConfig;
 	containerizedConfig?: ContainerizedRuntimeConfig;
@@ -687,7 +688,7 @@ export interface RuntimeFormData {
 }
 export interface MCPCatalogServerManifest {
 	catalogEntryID?: string;
-	manifest: Omit<MCPCatalogEntryServerManifest, 'remoteConfig'> & {
+	manifest: Omit<MCPCatalogEntryServerManifest, 'remoteConfig' | 'serverUserType'> & {
 		remoteConfig?: RemoteRuntimeConfigAdmin;
 		multiUserConfig?: MultiUserConfig;
 	};

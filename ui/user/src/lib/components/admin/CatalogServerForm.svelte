@@ -336,6 +336,7 @@
 			icon: baseData.icon,
 			env: baseData.env,
 			runtime: baseData.runtime,
+			serverUserType: type === 'multi' ? 'multiUser' : 'singleUser',
 			...convertCategoriesToMetadata(categories)
 		};
 
