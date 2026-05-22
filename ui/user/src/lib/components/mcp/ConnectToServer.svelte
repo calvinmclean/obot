@@ -85,6 +85,7 @@
 	let configureForm = $state<LaunchFormData | CompositeLaunchFormData>();
 	let configureFormTitle = $state<string>();
 	let secretBindingTargets = $state<MCPAllowedSecretBindingTarget[]>([]);
+	let secretBindingTargetsLoaded = $state(false);
 	let loadingSecretBindingTargets = $state(false);
 
 	let chatLoading = $state(false);
@@ -104,7 +105,7 @@
 		if (
 			!canBindSecretsForTemplate ||
 			loadingSecretBindingTargets ||
-			secretBindingTargets.length > 0
+			secretBindingTargetsLoaded
 		) {
 			return;
 		}
@@ -114,6 +115,7 @@
 				secretBindingTargets = targets;
 			})
 			.finally(() => {
+				secretBindingTargetsLoaded = true;
 				loadingSecretBindingTargets = false;
 			});
 	});
