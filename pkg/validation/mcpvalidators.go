@@ -1214,11 +1214,11 @@ func validateStartupTimeout(runtime types.Runtime, field string, startupTimeoutS
 }
 
 // ValidateSecretBindings enforces the rules for secretBinding references on
-// env vars and headers. Bindings are GitOps-only: they may only appear on
-// catalog entries synced from git (gitManaged=true). They also require the
-// kubernetes MCP runtime backend, are mutually exclusive with a static value,
-// require non-empty name/key, and are rejected in unsupported combinations
-// (env bindings under remote runtime).
+// env vars and headers. Bindings may appear on git-managed catalog entries or
+// admin-managed multi-user servers. They require the kubernetes MCP runtime
+// backend, are mutually exclusive with a static value, require non-empty
+// name/key, and are rejected in unsupported combinations (env bindings under
+// remote runtime).
 func ValidateSecretBindings(manifest types.MCPServerManifest, gitManaged bool, adminManaged bool, mcpBackend string) error {
 	check := func(kind, key string, h types.MCPHeader) error {
 		if h.SecretBinding == nil {
