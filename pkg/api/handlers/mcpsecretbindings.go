@@ -31,7 +31,7 @@ func (h *MCPSecretBindingHandler) ListAllowedSecrets(req api.Context) error {
 		return types.NewErrForbidden("only admins can list allowed MCP secret bindings")
 	}
 	if !mcp.IsKubernetesBackend(h.backend) || h.k8sClient == nil {
-		return req.Write(types.MCPAllowedSecretBindingTargetList{})
+		return req.Write(types.MCPAllowedSecretBindingTargetList{Items: []types.MCPAllowedSecretBindingTarget{}})
 	}
 
 	targets, err := mcp.ListAllowedSecretBindingTargets(req.Context(), h.k8sClient, h.namespace, h.allowedLabel)

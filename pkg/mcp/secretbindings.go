@@ -9,6 +9,8 @@ import (
 	"github.com/obot-platform/obot/apiclient/types"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/selection"
 	kclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -178,16 +180,18 @@ func ListAllowedSecretBindingTargets(ctx context.Context, c kclient.Client, obot
 		return nil, nil
 	}
 
+	requirement, err := labels.NewRequirement(allowedLabel, selection.Exists, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create allowed secret binding label selector: %w", err)
+	}
+	selector := labels.NewSelector().Add(*requirement)
 	var secrets corev1.SecretList
-	if err := c.List(ctx, &secrets, kclient.InNamespace(obotNamespace)); err != nil {
+	if err := c.List(ctx, &secrets, kclient.InNamespace(obotNamespace), kclient.MatchingLabelsSelector{Selector: selector}); err != nil {
 		return nil, fmt.Errorf("list allowed secret bindings: %w", err)
 	}
 
 	targets := make([]types.MCPAllowedSecretBindingTarget, 0, len(secrets.Items))
 	for _, secret := range secrets.Items {
-		if _, ok := secret.Labels[allowedLabel]; !ok {
-			continue
-		}
 		keys := make([]string, 0, len(secret.Data))
 		for key := range secret.Data {
 			keys = append(keys, key)
