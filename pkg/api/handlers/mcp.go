@@ -1512,6 +1512,8 @@ func mergeMCPServerManifests(existing, override types.MCPServerManifest) types.M
 	return existing
 }
 
+// applySecretBindingOverlay copies admin-selected secret bindings from the request
+// onto matching template fields while preserving the template-owned runtime shape.
 func applySecretBindingOverlay(manifest types.MCPServerManifest, overlay types.MCPServerManifest) types.MCPServerManifest {
 	bindingsByEnv := secretBindingsByEnv(overlay.Env)
 	for i := range manifest.Env {
@@ -1534,6 +1536,8 @@ func applySecretBindingOverlay(manifest types.MCPServerManifest, overlay types.M
 	return manifest
 }
 
+// adminManagedSecretBindingManifest extracts only the bindings owned by the admin-managed
+// server configuration, excluding bindings pinned by the source catalog entry.
 func adminManagedSecretBindingManifest(manifest types.MCPServerManifest, source *types.MCPServerCatalogEntryManifest, existing *types.MCPServerManifest, annotations map[string]string) types.MCPServerManifest {
 	sourceEnv := make(map[string]*types.MCPSecretBinding)
 	sourceHeaders := make(map[string]*types.MCPSecretBinding)
@@ -1573,6 +1577,8 @@ func adminManagedSecretBindingManifest(manifest types.MCPServerManifest, source 
 	return result
 }
 
+// adminManagedSecretBinding decides whether a binding should be treated as local admin
+// configuration rather than catalog-owned config for validation and drift detection.
 func adminManagedSecretBinding(key string, binding, sourceBinding, existingBinding *types.MCPSecretBinding, hasSource bool, annotated []string) bool {
 	if binding == nil {
 		return false
@@ -1589,6 +1595,8 @@ func adminManagedSecretBinding(key string, binding, sourceBinding, existingBindi
 	return true
 }
 
+// setAdminSecretBindingAnnotation records admin-owned binding field names so later
+// catalog drift checks can distinguish local configuration from source catalog changes.
 func setAdminSecretBindingAnnotation(server *v1.MCPServer, source *types.MCPServerCatalogEntryManifest, existing *types.MCPServerManifest, annotations map[string]string) error {
 	refs := adminManagedSecretBindingRefs(server.Spec.Manifest, source, existing, annotations)
 	if len(refs.Env) == 0 && len(refs.Headers) == 0 {
@@ -1609,6 +1617,7 @@ func setAdminSecretBindingAnnotation(server *v1.MCPServer, source *types.MCPServ
 	return nil
 }
 
+// adminManagedSecretBindingRefs returns the env/header field names with admin-owned bindings.
 func adminManagedSecretBindingRefs(manifest types.MCPServerManifest, source *types.MCPServerCatalogEntryManifest, existing *types.MCPServerManifest, annotations map[string]string) mcp.SecretBindingRefsAnnotation {
 	adminManaged := adminManagedSecretBindingManifest(manifest, source, existing, annotations)
 	refs := mcp.SecretBindingRefsAnnotation{}
@@ -1623,6 +1632,8 @@ func adminManagedSecretBindingRefs(manifest types.MCPServerManifest, source *typ
 	return refs
 }
 
+// readAdminSecretBindingAnnotation best-effort decodes the admin binding annotation;
+// malformed annotations are treated as absent so the API can recompute them.
 func readAdminSecretBindingAnnotation(annotations map[string]string) mcp.SecretBindingRefsAnnotation {
 	if annotations == nil || annotations[mcp.AdminSecretBindingsAnnotation] == "" {
 		return mcp.SecretBindingRefsAnnotation{}

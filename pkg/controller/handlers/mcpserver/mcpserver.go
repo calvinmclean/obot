@@ -32,9 +32,7 @@ import (
 
 var log = logger.Package()
 
-const (
-	oauthMetadataSyncInterval = time.Hour
-)
+const oauthMetadataSyncInterval = time.Hour
 
 type Handler struct {
 	gptClient                    *gptscript.GPTScript
