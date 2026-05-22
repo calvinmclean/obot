@@ -22,7 +22,7 @@ func TestMCPSecretBindingRouteAuthorization(t *testing.T) {
 			name: "admin can list allowed secret bindings",
 			user: &user.DefaultInfo{
 				Name:   "admin",
-				Groups: []string{types.GroupAdmin, types.GroupAuthenticated},
+				Groups: types.RoleOwner.Groups(),
 			},
 			allowed: true,
 		},
@@ -30,7 +30,7 @@ func TestMCPSecretBindingRouteAuthorization(t *testing.T) {
 			name: "owner can list allowed secret bindings",
 			user: &user.DefaultInfo{
 				Name:   "owner",
-				Groups: []string{types.GroupOwner, types.GroupAuthenticated},
+				Groups: types.RoleOwner.Groups(),
 			},
 			allowed: true,
 		},
@@ -38,7 +38,7 @@ func TestMCPSecretBindingRouteAuthorization(t *testing.T) {
 			name: "auditor cannot list allowed secret bindings",
 			user: &user.DefaultInfo{
 				Name:   "auditor",
-				Groups: []string{types.GroupAuditor, types.GroupAuthenticated},
+				Groups: types.RoleAuditor.Groups(),
 			},
 			allowed: false,
 		},
@@ -46,7 +46,7 @@ func TestMCPSecretBindingRouteAuthorization(t *testing.T) {
 			name: "basic user cannot list allowed secret bindings",
 			user: &user.DefaultInfo{
 				Name:   "user",
-				Groups: []string{types.GroupBasic, types.GroupAuthenticated},
+				Groups: types.RoleBasic.Groups(),
 			},
 			allowed: false,
 		},
