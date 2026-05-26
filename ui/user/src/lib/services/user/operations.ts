@@ -1,4 +1,5 @@
 import { BOOTSTRAP_USER_ID } from '$lib/constants';
+import { mcpServerDeleteResponseHandler } from '$lib/services/admin/operations';
 import { Group } from '$lib/services/admin/types';
 import { buildQueryString } from '$lib/url';
 import type {
@@ -1085,7 +1086,9 @@ export async function deleteWorkspaceMCPCatalogServer(
 	workspaceID: string,
 	serverID: string
 ): Promise<void> {
-	await doDelete(`/workspaces/${workspaceID}/servers/${serverID}`);
+	await doDelete(`/workspaces/${workspaceID}/servers/${serverID}`, {
+		responseHandler: mcpServerDeleteResponseHandler
+	});
 }
 
 export async function configureWorkspaceMCPCatalogServer(
