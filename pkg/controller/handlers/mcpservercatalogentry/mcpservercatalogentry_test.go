@@ -6,6 +6,7 @@ import (
 
 	"github.com/obot-platform/nah/pkg/router"
 	"github.com/obot-platform/obot/apiclient/types"
+	"github.com/obot-platform/obot/pkg/mcp"
 	v1 "github.com/obot-platform/obot/pkg/storage/apis/obot.obot.ai/v1"
 	storagescheme "github.com/obot-platform/obot/pkg/storage/scheme"
 	"github.com/stretchr/testify/assert"
@@ -61,6 +62,70 @@ func TestDetectCompositeDriftMarksEntryNeedingUpdateWhenMultiUserComponentDrifts
 	var updated v1.MCPServerCatalogEntry
 	require.NoError(t, client.Get(context.Background(), router.Key(compositeEntry.Namespace, compositeEntry.Name), &updated))
 	assert.True(t, updated.Status.NeedsUpdate)
+}
+
+func TestDetectCompositeDriftIgnoresAnnotatedAdminSecretBindings(t *testing.T) {
+	binding := &types.MCPSecretBinding{Name: "admin-secret", Key: "api-key"}
+	componentSnapshot := types.MCPServerCatalogEntryManifest{
+		Name:           "Shared Component",
+		Runtime:        types.RuntimeContainerized,
+		ServerUserType: types.ServerUserTypeMultiUser,
+		ContainerizedConfig: &types.ContainerizedRuntimeConfig{
+			Image: "example/component:1.0.0",
+			Port:  8080,
+			Path:  "/mcp",
+		},
+		Env: []types.MCPEnv{{MCPHeader: types.MCPHeader{
+			Key:       "API_KEY",
+			Name:      "API Key",
+			Required:  true,
+			Sensitive: true,
+		}}},
+	}
+	compositeEntry := newMCPServerCatalogEntry("composite-entry", types.MCPServerCatalogEntryManifest{
+		Name:    "Composite Entry",
+		Runtime: types.RuntimeComposite,
+		CompositeConfig: &types.CompositeCatalogConfig{
+			ComponentServers: []types.CatalogComponentServer{{
+				MCPServerID: "shared-server",
+				Manifest:    componentSnapshot,
+			}},
+		},
+	})
+	compositeEntry.Status.NeedsUpdate = true
+	sharedServer := newMCPServer("shared-server", types.MCPServerManifest{
+		Name:    "Shared Component",
+		Runtime: types.RuntimeContainerized,
+		ContainerizedConfig: &types.ContainerizedRuntimeConfig{
+			Image: "example/component:1.0.0",
+			Port:  8080,
+			Path:  "/mcp",
+		},
+		Env: []types.MCPEnv{{MCPHeader: types.MCPHeader{
+			Key:           "API_KEY",
+			Name:          "API Key",
+			Required:      true,
+			Sensitive:     true,
+			SecretBinding: binding,
+		}}},
+	})
+	sharedServer.Annotations = map[string]string{
+		mcp.AdminSecretBindingsAnnotation: `{"env":["API_KEY"]}`,
+	}
+
+	client := newFakeClient(compositeEntry, sharedServer)
+	err := (&Handler{}).DetectCompositeDrift(router.Request{
+		Client:    client,
+		Ctx:       context.Background(),
+		Object:    compositeEntry,
+		Namespace: compositeEntry.Namespace,
+		Name:      compositeEntry.Name,
+	}, &router.ResponseWrapper{})
+	require.NoError(t, err)
+
+	var updated v1.MCPServerCatalogEntry
+	require.NoError(t, client.Get(context.Background(), router.Key(compositeEntry.Namespace, compositeEntry.Name), &updated))
+	assert.False(t, updated.Status.NeedsUpdate)
 }
 
 func TestDetectCompositeDriftClearsEntryWhenMultiUserComponentMatches(t *testing.T) {

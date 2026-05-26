@@ -147,7 +147,7 @@ func (*Handler) DetectCompositeDrift(req router.Request, _ router.Response) erro
 				return fmt.Errorf("failed to get multi-user server %s: %w", component.MCPServerID, err)
 			}
 
-			hasDrifted, err := mcpserver.ConfigurationHasDrifted(server.Spec.Manifest, component.Manifest, false)
+			hasDrifted, err := mcpserver.ConfigurationHasDriftedWithAdminBindings(server.Spec.Manifest, component.Manifest, false, server.Annotations)
 			if err != nil {
 				return fmt.Errorf("failed to detect drift for multi-user server %s: %w", component.MCPServerID, err)
 			}

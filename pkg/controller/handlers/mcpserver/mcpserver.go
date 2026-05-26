@@ -262,6 +262,10 @@ func ConfigurationHasDrifted(serverManifest types.MCPServerManifest, entryManife
 	return configurationHasDrifted(serverManifest, entryManifest, defaultDenyAllEgress, mcp.SecretBindingRefs{})
 }
 
+func ConfigurationHasDriftedWithAdminBindings(serverManifest types.MCPServerManifest, entryManifest types.MCPServerCatalogEntryManifest, defaultDenyAllEgress bool, annotations map[string]string) (bool, error) {
+	return configurationHasDrifted(serverManifest, entryManifest, defaultDenyAllEgress, adminSecretBindingRefs(annotations))
+}
+
 func configurationHasDrifted(serverManifest types.MCPServerManifest, entryManifest types.MCPServerCatalogEntryManifest, defaultDenyAllEgress bool, adminBindings mcp.SecretBindingRefs) (bool, error) {
 	// Check if runtime types differ
 	if serverManifest.Runtime != entryManifest.Runtime {
@@ -298,8 +302,8 @@ func configurationHasDrifted(serverManifest types.MCPServerManifest, entryManife
 		return true, nil
 	}
 
-	// Check environment. Secret bindings added to the deployed server are administrator
-	// configuration, not source catalog drift, unless the catalog entry itself pins a binding.
+	// Check environment. Secret binding selections are deployment configuration,
+	// not source catalog drift.
 	return fieldSlicesHaveDrifted(serverManifest.Env, entryManifest.Env, func(serverField, entryField types.MCPEnv) bool {
 		return mcpEnvMatchesCatalog(serverField, entryField, adminBindings.Env)
 	}), nil

@@ -10,6 +10,8 @@
  * - `remoteConfig.fixedURL`: catalog-only field translated to `url` at deploy time
  * - `remoteConfig.url`: runtime-only field derived from catalog's `fixedURL`
  * - `remoteConfig.isTemplate`: runtime-only field not present on catalog manifests
+ * - `env[].secretBinding`/`remoteConfig.headers[].secretBinding`: runtime-only
+ *   binding selections for launched multi-user servers
  *
  * For composite manifests, the same fields are stripped from each component's
  * nested manifest at `compositeConfig.componentServers[].manifest`. Nested
@@ -26,11 +28,17 @@ export function stripManifestMetadata<T>(manifest: T): T {
 	const stripFields = (m: any) => {
 		if (!m || typeof m !== 'object') return;
 		delete m.repoURL;
-		delete clone.serverUserType;
+		delete m.serverUserType;
+		for (const env of m.env ?? []) {
+			delete env.secretBinding;
+		}
 		if (m.remoteConfig) {
 			delete m.remoteConfig.fixedURL;
 			delete m.remoteConfig.url;
 			delete m.remoteConfig.isTemplate;
+			for (const header of m.remoteConfig.headers ?? []) {
+				delete header.secretBinding;
+			}
 		}
 	};
 
