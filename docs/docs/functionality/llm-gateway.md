@@ -33,6 +33,7 @@ The model name shown on the Models page is the value to put in your request's `m
 The **LLM Gateway** sidebar section also groups the administrator pages that power this feature:
 
 - **Token Usage** — usage and cost analytics across users and models (admin only).
+- **Audit Logs** — request history, token usage, outcomes, and exports for LLM gateway traffic (admin only). See [Audit Logs and Usage](/functionality/audit-logs-and-usage/).
 - **Model Providers** — configure providers and their available models (admin only). See [Model Providers](/configuration/model-providers/).
 - **Model Access Policies** — control which users can use which models (admin only). See [Model Access Policies](/functionality/model-access-policies/).
 
@@ -172,6 +173,7 @@ See the Codex documentation for details:
 - **Claude Code model discovery caveats.** Gateway model discovery is **off by default**, requires **Claude Code v2.1.129+**, and only adds models whose IDs begin with `claude` or `anthropic`. Obot's Anthropic models qualify; if discovery doesn't surface a model, select it manually with `/model`.
 - **OpenAI uses the Responses API.** The OpenAI passthrough supports the Responses API (`/v1/responses`); the Chat Completions endpoint is not currently supported. Codex uses the Responses API by default.
 - **Usage and policies still apply.** Requests count toward Obot [token usage](/functionality/audit-logs-and-usage/) and, where configured, are subject to [Message Policies](/functionality/message-policies/).
+- **Audit logs can be exported.** Administrators can create one-time or scheduled exports for LLM gateway audit logs. See [Audit Log Export](/configuration/audit-log-export/).
 
 ## Related topics
 
@@ -179,3 +181,4 @@ See the Codex documentation for details:
 - [Model Access Policies](/functionality/model-access-policies/) — grant users access to specific models
 - [Obot CLI Setup](/installation/cli-setup/) — install and configure the `obot` CLI
 - [Audit Logs and Usage](/functionality/audit-logs-and-usage/) — monitor token usage
+- [Audit Log Export](/configuration/audit-log-export/) — export LLM gateway audit logs
