@@ -6,7 +6,11 @@ export type ProviderShortKey =
 	| 'aws-bedrock-anthropic'
 	| 'aws-bedrock-openai'
 	| 'aws-bedrock-api-key-anthropic'
-	| 'aws-bedrock-api-key-openai';
+	| 'aws-bedrock-api-key-openai'
+	| 'azure-anthropic'
+	| 'azure-openai'
+	| 'azure-entra-anthropic'
+	| 'azure-entra-openai';
 
 export interface ProviderConnection {
 	id: string;
@@ -51,6 +55,30 @@ export const PROVIDER_CONNECTIONS: Record<ProviderShortKey, ProviderConnection> 
 		shortKey: 'aws-bedrock-api-key-openai',
 		displayName: 'Amazon Bedrock API Key (OpenAI-compatible)',
 		routePath: 'aws-bedrock-api-key'
+	},
+	'azure-anthropic': {
+		id: CommonModelProviderIds.AZURE,
+		shortKey: 'azure-anthropic',
+		displayName: 'Azure (Anthropic-compatible)',
+		routePath: 'azure'
+	},
+	'azure-openai': {
+		id: CommonModelProviderIds.AZURE,
+		shortKey: 'azure-openai',
+		displayName: 'Azure (OpenAI-compatible)',
+		routePath: 'azure'
+	},
+	'azure-entra-anthropic': {
+		id: CommonModelProviderIds.AZURE_ENTRA,
+		shortKey: 'azure-entra-anthropic',
+		displayName: 'Azure Entra (Anthropic-compatible)',
+		routePath: 'azure-entra'
+	},
+	'azure-entra-openai': {
+		id: CommonModelProviderIds.AZURE_ENTRA,
+		shortKey: 'azure-entra-openai',
+		displayName: 'Azure Entra (OpenAI-compatible)',
+		routePath: 'azure-entra'
 	}
 };
 
@@ -58,7 +86,9 @@ export const SUPPORTED_PROVIDER_IDS = new Set<string>([
 	CommonModelProviderIds.OPENAI,
 	CommonModelProviderIds.ANTHROPIC,
 	CommonModelProviderIds.AMAZON_BEDROCK,
-	CommonModelProviderIds.AMAZON_BEDROCK_API_KEY
+	CommonModelProviderIds.AMAZON_BEDROCK_API_KEY,
+	CommonModelProviderIds.AZURE,
+	CommonModelProviderIds.AZURE_ENTRA
 ]);
 
 export interface RenderContext {

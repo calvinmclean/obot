@@ -66,6 +66,8 @@ func (s *Server) AddRoutes(mux *server.Server) {
 	mux.HandleFunc("/api/llm-proxy/anthropic/{path...}", s.newLLMProviderProxy(mustParseURL(anthropicBaseURL), system.AnthropicModelProvider).proxy)
 	mux.HandleFunc("/api/llm-proxy/aws-bedrock/{path...}", s.newAWSBedrockLLMProviderProxy().proxy)
 	mux.HandleFunc("/api/llm-proxy/aws-bedrock-api-key/{path...}", s.newAWSBedrockAPIKeyLLMProviderProxy().proxy)
+	mux.HandleFunc("/api/llm-proxy/azure/{path...}", s.newAzureLLMProviderProxy(system.AzureModelProvider).proxy)
+	mux.HandleFunc("/api/llm-proxy/azure-entra/{path...}", s.newAzureLLMProviderProxy(system.AzureEntraModelProvider).proxy)
 	mux.HandleFunc("/api/llm-proxy/{path...}", s.dispatchLLMProxy)
 
 	// API Keys for MCP server access - user's own keys
