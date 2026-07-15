@@ -76,6 +76,37 @@ func TestCallLLMBedrockOpenAIResponses(t *testing.T) {
 	assert.Equal(t, []any{map[string]any{"role": "user", "content": "Hello"}}, gotBody["input"])
 }
 
+func TestCallLLMGenericResponses(t *testing.T) {
+	var (
+		gotPath string
+		gotBody map[string]any
+	)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		_ = json.NewDecoder(r.Body).Decode(&gotBody)
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = io.WriteString(w, "data: {\"type\":\"response.output_text.delta\",\"delta\":\"COMPLIANT\"}\n\n")
+	}))
+	defer server.Close()
+
+	result, err := (&Helper{}).callLLM(context.Background(), &resolvedModel{
+		targetModel:  "open-model",
+		providerName: system.GenericResponsesModelProvider,
+		providerURL:  server.URL + "/v1",
+		dialect:      string(nanobottypes.DialectOpenAIResponses),
+	}, []chatMessage{{Role: "system", Content: "Review policy"}, {Role: "user", Content: "Hello"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assert.Equal(t, "COMPLIANT", result)
+	assert.Equal(t, "/v1/responses", gotPath)
+	assert.Equal(t, "open-model", gotBody["model"])
+	assert.Equal(t, "Review policy", gotBody["instructions"])
+	assert.Equal(t, true, gotBody["stream"])
+	assert.Equal(t, []any{map[string]any{"role": "user", "content": "Hello"}}, gotBody["input"])
+}
+
 func TestCallLLMNonBedrockAnthropicUsesChatCompletions(t *testing.T) {
 	var gotPath string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

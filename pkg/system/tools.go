@@ -3,6 +3,7 @@ package system
 const (
 	OpenAIModelProvider              = "openai-model-provider"
 	AnthropicModelProvider           = "anthropic-model-provider"
+	GenericResponsesModelProvider    = "generic-responses-model-provider"
 	AmazonBedrockModelProvider       = "amazon-bedrock-model-provider"
 	AmazonBedrockAPIKeyModelProvider = "amazon-bedrock-api-key-model-provider"
 

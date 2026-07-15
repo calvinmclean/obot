@@ -286,6 +286,9 @@ func (h *Helper) callLLM(ctx context.Context, resolved *resolvedModel, messages 
 	if resolved.dialect == string(nanobottypes.DialectBifrostRequest) {
 		return h.callLLMBifrost(ctx, resolved, messages)
 	}
+	if resolved.dialect == string(nanobottypes.DialectOpenAIResponses) {
+		return h.callLLMOpenAIResponses(ctx, resolved, messages)
+	}
 	return h.callLLMChatCompletions(ctx, resolved, messages)
 }
 
