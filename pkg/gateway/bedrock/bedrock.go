@@ -131,7 +131,7 @@ func RouteDialect(dialect nanobottypes.Dialect) (string, error) {
 	switch dialect {
 	case nanobottypes.DialectAnthropicMessages:
 		return "anthropic", nil
-	case nanobottypes.DialectOpenAIResponses:
+	case nanobottypes.DialectOpenAIResponses, nanobottypes.DialectOpenResponses:
 		return "openai", nil
 	default:
 		return "", fmt.Errorf("unsupported Bedrock model dialect %q", dialect)

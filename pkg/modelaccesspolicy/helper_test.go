@@ -170,6 +170,15 @@ func TestGetUserAllowedTargetModels(t *testing.T) {
 			want:     map[string]bool{"openai.gpt-5.5": true},
 		},
 		{
+			name: "responses dialects are compatible",
+			models: []*v1.Model{
+				newModel("m1-open-responses", provider, "open-model", true, withDialect("OpenResponses")),
+			},
+			policies: []*v1.ModelAccessPolicy{userPolicy("m1-open-responses")},
+			dialect:  "OpenAIResponses",
+			want:     map[string]bool{"open-model": true},
+		},
+		{
 			name: "empty when user is allowed nothing",
 			models: []*v1.Model{
 				newModel("m1-gpt-4o", provider, "gpt-4o", true),

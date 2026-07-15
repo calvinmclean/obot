@@ -213,7 +213,8 @@ func (h *Helper) GetUserAllowedTargetModels(user kuser.Info, provider, dialect s
 	allowed = make(map[string]bool, len(objs))
 	for _, obj := range objs {
 		m, ok := obj.(*v1.Model)
-		if !ok || (dialect != "" && m.Spec.Manifest.Dialect != dialect) {
+		if !ok || (dialect != "" && m.Spec.Manifest.Dialect != dialect &&
+			!(system.IsResponsesDialect(m.Spec.Manifest.Dialect) && system.IsResponsesDialect(dialect))) {
 			continue
 		}
 		if allowAll || allowedModels[m.Name] {
