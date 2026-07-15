@@ -94,7 +94,7 @@ curl $OPENAI_BASE_URL/v1/responses \
 
 ### Generic Responses Compatible
 
-The Generic Responses route serves the **Responses API** using the base URL configured by your administrator. The upstream API key is optional, which supports local services such as Ollama as well as authenticated OpenAIResponses-compatible services such as LiteLLM.
+The Generic Responses route serves the **Responses API** using the base URL configured by your administrator. The upstream API key is optional, which supports local services such as Ollama as well as authenticated Responses API-compatible services such as LiteLLM.
 
 ```bash
 export OPENAI_BASE_URL="https://obot.example.com/api/llm-proxy/generic-responses"
