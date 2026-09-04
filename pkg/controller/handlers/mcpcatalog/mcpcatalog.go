@@ -412,13 +412,7 @@ func (h *Handler) resolveCompositeSourceRefs(ctx context.Context, c kclient.Clie
 					continue
 				}
 				if mcp.ServerHasSensitiveStaticConfiguration(&server.Spec.Manifest) {
-					credentialContext := server.Spec.UserID
-					if server.Spec.MCPCatalogID != "" {
-						credentialContext = server.Spec.MCPCatalogID
-					} else if server.Spec.PowerUserWorkspaceID != "" {
-						credentialContext = server.Spec.PowerUserWorkspaceID
-					}
-					credential, err := h.gatewayClient.RevealCredential(ctx, []string{fmt.Sprintf("%s-%s", credentialContext, server.Name)}, mcp.StaticConfigurationCredentialName(server.Name))
+					credential, err := h.gatewayClient.RevealCredential(ctx, []string{mcp.MCPServerCredentialContext(server)}, mcp.StaticConfigurationCredentialName(server.Name))
 					if err != nil && !errors.As(err, &gclient.CredentialNotFoundError{}) {
 						errs = append(errs, err)
 						continue

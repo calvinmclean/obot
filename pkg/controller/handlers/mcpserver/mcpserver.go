@@ -52,13 +52,7 @@ func (h *Handler) MigrateStaticConfiguration(req router.Request, _ router.Respon
 		return nil
 	}
 	before := utils.Digest(server.Spec.Manifest)
-	contextName := server.Spec.UserID
-	if server.Spec.MCPCatalogID != "" {
-		contextName = server.Spec.MCPCatalogID
-	} else if server.Spec.PowerUserWorkspaceID != "" {
-		contextName = server.Spec.PowerUserWorkspaceID
-	}
-	credentialContext := fmt.Sprintf("%s-%s", contextName, server.Name)
+	credentialContext := mcp.MCPServerCredentialContext(*server)
 	existing, err := mcp.StaticCredentialSecrets(req.Ctx, h.gatewayClient, credentialContext, server.Name)
 	if err != nil {
 		return err
@@ -299,14 +293,7 @@ func (h *Handler) DetectK8sSettingsDrift(req router.Request, _ router.Response) 
 func ConfigurationHasDrifted(ctx context.Context, gatewayClient *gateway.Client, server *v1.MCPServer, entryManifest types.MCPServerCatalogEntryManifest, defaultDenyAllEgress bool) (bool, error) {
 	serverManifest := server.Spec.Manifest
 	if mcp.CatalogHasSensitiveStaticConfiguration(&entryManifest) {
-		credentialContext := server.Spec.UserID
-		if server.Spec.MCPCatalogID != "" {
-			credentialContext = server.Spec.MCPCatalogID
-		} else if server.Spec.PowerUserWorkspaceID != "" {
-			credentialContext = server.Spec.PowerUserWorkspaceID
-		}
-
-		credential, err := gatewayClient.RevealCredential(ctx, []string{fmt.Sprintf("%s-%s", credentialContext, server.Name)}, mcp.StaticConfigurationCredentialName(server.Name))
+		credential, err := gatewayClient.RevealCredential(ctx, []string{mcp.MCPServerCredentialContext(*server)}, mcp.StaticConfigurationCredentialName(server.Name))
 		if err != nil && !errors.As(err, &gateway.CredentialNotFoundError{}) {
 			return false, err
 		}
@@ -753,13 +740,7 @@ func (h *Handler) EnsureCompositeComponents(req router.Request, _ router.Respons
 		len(manifest.CompositeConfig.ComponentServers) < 1 {
 		return nil
 	}
-	credentialContext := compositeServer.Spec.UserID
-	if compositeServer.Spec.MCPCatalogID != "" {
-		credentialContext = compositeServer.Spec.MCPCatalogID
-	} else if compositeServer.Spec.PowerUserWorkspaceID != "" {
-		credentialContext = compositeServer.Spec.PowerUserWorkspaceID
-	}
-	parentCredential, err := h.gatewayClient.RevealCredential(req.Ctx, []string{fmt.Sprintf("%s-%s", credentialContext, compositeServer.Name)}, mcp.StaticConfigurationCredentialName(compositeServer.Name))
+	parentCredential, err := h.gatewayClient.RevealCredential(req.Ctx, []string{mcp.MCPServerCredentialContext(*compositeServer)}, mcp.StaticConfigurationCredentialName(compositeServer.Name))
 	if err != nil && !errors.As(err, &gateway.CredentialNotFoundError{}) {
 		return fmt.Errorf("failed to reveal composite static configuration: %w", err)
 	}
@@ -881,7 +862,7 @@ func (h *Handler) EnsureCompositeComponents(req router.Request, _ router.Respons
 				return fmt.Errorf("failed to create new component server: %w", err)
 			}
 			if len(componentSecrets) > 0 {
-				if err := h.gatewayClient.UpsertCredential(req.Ctx, gatewaytypes.Credential{Context: fmt.Sprintf("%s-%s", compositeServer.Spec.UserID, newServer.Name), Name: mcp.StaticConfigurationCredentialName(newServer.Name), Secrets: componentSecrets}); err != nil {
+				if err := h.gatewayClient.UpsertCredential(req.Ctx, gatewaytypes.Credential{Context: mcp.MCPServerCredentialContextForUser(compositeServer.Spec.UserID, newServer.Name), Name: mcp.StaticConfigurationCredentialName(newServer.Name), Secrets: componentSecrets}); err != nil {
 					_ = req.Client.Delete(req.Ctx, &newServer)
 					return fmt.Errorf("failed to store component static configuration: %w", err)
 				}
@@ -889,7 +870,7 @@ func (h *Handler) EnsureCompositeComponents(req router.Request, _ router.Respons
 			slog.Info("Created component MCP server for composite server", "composite", compositeServer.Name, "catalogEntry", component.CatalogEntryID)
 		} else {
 			componentManifest := component.Manifest
-			childContext := fmt.Sprintf("%s-%s", compositeServer.Spec.UserID, existingServer.Name)
+			childContext := mcp.MCPServerCredentialContextForUser(compositeServer.Spec.UserID, existingServer.Name)
 			existingCredential, err := h.gatewayClient.RevealCredential(req.Ctx, []string{childContext}, mcp.StaticConfigurationCredentialName(existingServer.Name))
 			if err != nil && !errors.As(err, &gateway.CredentialNotFoundError{}) {
 				return err
@@ -1037,14 +1018,7 @@ func (h *Handler) SyncOAuthMetadata(req router.Request, _ router.Response) error
 		return nil
 	}
 
-	var credCtxs []string
-	if server.Spec.IsCatalogServer() {
-		credCtxs = []string{fmt.Sprintf("%s-%s", server.Spec.MCPCatalogID, server.Name)}
-	} else if server.Spec.IsPowerUserWorkspaceServer() {
-		credCtxs = []string{fmt.Sprintf("%s-%s", server.Spec.PowerUserWorkspaceID, server.Name)}
-	} else {
-		credCtxs = []string{fmt.Sprintf("%s-%s", server.Spec.UserID, server.Name)}
-	}
+	credCtxs := []string{mcp.MCPServerCredentialContext(*server)}
 	cred, err := h.gatewayClient.RevealCredential(req.Ctx, credCtxs, server.Name)
 	if err != nil && !errors.As(err, &gateway.CredentialNotFoundError{}) {
 		return fmt.Errorf("failed to reveal credential: %w", err)

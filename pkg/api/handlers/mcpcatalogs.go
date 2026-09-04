@@ -585,14 +585,7 @@ func (h *MCPCatalogHandler) AdminListServersForEntryInCatalog(req api.Context) e
 			continue
 		}
 
-		var credCtx string
-		if server.Spec.IsCatalogServer() {
-			credCtx = fmt.Sprintf("%s-%s", server.Spec.MCPCatalogID, server.Name)
-		} else if server.Spec.IsPowerUserWorkspaceServer() {
-			credCtx = fmt.Sprintf("%s-%s", server.Spec.PowerUserWorkspaceID, server.Name)
-		} else {
-			credCtx = fmt.Sprintf("%s-%s", server.Spec.UserID, server.Name)
-		}
+		credCtx := mcp.MCPServerCredentialContext(server)
 		credEnv, err := mcp.RuntimeCredentialSecrets(req.Context(), req.GatewayClient, credCtx, server.Name)
 		if err != nil {
 			return fmt.Errorf("failed to find credential: %w", err)
@@ -718,14 +711,7 @@ func (h *MCPCatalogHandler) AdminListServersForAllEntriesInCatalog(req api.Conte
 
 	var items []types.MCPServer
 	for _, server := range filteredServers {
-		var credCtx string
-		if server.Spec.IsCatalogServer() {
-			credCtx = fmt.Sprintf("%s-%s", server.Spec.MCPCatalogID, server.Name)
-		} else if server.Spec.IsPowerUserWorkspaceServer() {
-			credCtx = fmt.Sprintf("%s-%s", server.Spec.PowerUserWorkspaceID, server.Name)
-		} else {
-			credCtx = fmt.Sprintf("%s-%s", server.Spec.UserID, server.Name)
-		}
+		credCtx := mcp.MCPServerCredentialContext(server)
 		credEnv, err := mcp.RuntimeCredentialSecrets(req.Context(), req.GatewayClient, credCtx, server.Name)
 		if err != nil {
 			return fmt.Errorf("failed to find credential: %w", err)
@@ -796,14 +782,7 @@ func (h *MCPCatalogHandler) ListServersForEntry(req api.Context) error {
 			continue
 		}
 
-		var credCtx string
-		if server.Spec.IsCatalogServer() {
-			credCtx = fmt.Sprintf("%s-%s", server.Spec.MCPCatalogID, server.Name)
-		} else if server.Spec.IsPowerUserWorkspaceServer() {
-			credCtx = fmt.Sprintf("%s-%s", server.Spec.PowerUserWorkspaceID, server.Name)
-		} else {
-			credCtx = fmt.Sprintf("%s-%s", server.Spec.UserID, server.Name)
-		}
+		credCtx := mcp.MCPServerCredentialContext(server)
 		credEnv, err := mcp.RuntimeCredentialSecrets(req.Context(), req.GatewayClient, credCtx, server.Name)
 		if err != nil {
 			return fmt.Errorf("failed to find credential: %w", err)
@@ -865,14 +844,7 @@ func (h *MCPCatalogHandler) GetServerFromEntry(req api.Context) error {
 		return fmt.Errorf("failed to list servers: %w", err)
 	}
 
-	var credCtx string
-	if server.Spec.IsCatalogServer() {
-		credCtx = fmt.Sprintf("%s-%s", server.Spec.MCPCatalogID, server.Name)
-	} else if server.Spec.IsPowerUserWorkspaceServer() {
-		credCtx = fmt.Sprintf("%s-%s", server.Spec.PowerUserWorkspaceID, server.Name)
-	} else {
-		credCtx = fmt.Sprintf("%s-%s", server.Spec.UserID, server.Name)
-	}
+	credCtx := mcp.MCPServerCredentialContext(server)
 	credEnv, err := mcp.RuntimeCredentialSecrets(req.Context(), req.GatewayClient, credCtx, server.Name)
 	if err != nil {
 		return fmt.Errorf("failed to find credential: %w", err)
@@ -1759,13 +1731,7 @@ func (h *MCPCatalogHandler) populateComponentManifests(req api.Context, manifest
 				return types.NewErrBadRequest("multi-user server %s belongs to catalog %s, not %s", component.MCPServerID, server.Spec.MCPCatalogID, catalogName)
 			}
 			if mcp.ServerHasSensitiveStaticConfiguration(&server.Spec.Manifest) {
-				credentialContext := server.Spec.UserID
-				if server.Spec.MCPCatalogID != "" {
-					credentialContext = server.Spec.MCPCatalogID
-				} else if server.Spec.PowerUserWorkspaceID != "" {
-					credentialContext = server.Spec.PowerUserWorkspaceID
-				}
-				secrets, err := mcp.StaticCredentialSecrets(req.Context(), req.GatewayClient, fmt.Sprintf("%s-%s", credentialContext, server.Name), server.Name)
+				secrets, err := mcp.StaticCredentialSecrets(req.Context(), req.GatewayClient, mcp.MCPServerCredentialContext(server), server.Name)
 				if err != nil {
 					return fmt.Errorf("failed to reveal component server static configuration: %w", err)
 				}

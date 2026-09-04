@@ -243,16 +243,15 @@ func (sm *SessionManager) serverFromMCPServerInstance(ctx context.Context, insta
 
 	addExtractedEnvVars(&server)
 
-	var credCtx, scope string
+	credCtx := CatalogOrPowerUserWorkspaceServerCredentialContext(server)
+	var scope string
 	if server.Spec.MCPCatalogID != "" {
-		credCtx = fmt.Sprintf("%s-%s", server.Spec.MCPCatalogID, server.Name)
 		scope = server.Spec.MCPCatalogID
 	} else if server.Spec.PowerUserWorkspaceID != "" {
-		credCtx = fmt.Sprintf("%s-%s", server.Spec.PowerUserWorkspaceID, server.Name)
 		scope = server.Spec.PowerUserWorkspaceID
 	} else {
-		credCtx = fmt.Sprintf("%s-%s", instance.Spec.UserID, server.Name)
 		scope = instance.Spec.UserID
+		credCtx = MCPServerCredentialContextForUser(instance.Spec.UserID, server.Name)
 	}
 
 	credEnv, err := sm.runtimeCredentials(ctx, credCtx, server.Name)
@@ -307,24 +306,18 @@ func (sm *SessionManager) serverConfigForAction(ctx context.Context, server v1.M
 		return ServerConfig{}, nil, types.NewErrBadRequest("mcp server %s needs to update its URL", server.Name)
 	}
 
-	var (
-		credCtxs []string
-		scope    string
-	)
+	var scope string
 	if server.Spec.MCPCatalogID != "" {
-		credCtxs = append(credCtxs, fmt.Sprintf("%s-%s", server.Spec.MCPCatalogID, server.Name))
 		scope = server.Spec.MCPCatalogID
 	} else if server.Spec.PowerUserWorkspaceID != "" {
-		credCtxs = append(credCtxs, fmt.Sprintf("%s-%s", server.Spec.PowerUserWorkspaceID, server.Name))
 		scope = server.Spec.PowerUserWorkspaceID
 	} else {
-		credCtxs = append(credCtxs, fmt.Sprintf("%s-%s", server.Spec.UserID, server.Name))
 		scope = server.Spec.UserID
 	}
 
 	addExtractedEnvVars(&server)
 
-	credEnv, err := sm.runtimeCredentials(ctx, credCtxs[0], server.Name)
+	credEnv, err := sm.runtimeCredentials(ctx, MCPServerCredentialContext(server), server.Name)
 	if err != nil {
 		return ServerConfig{}, nil, fmt.Errorf("failed to find credential: %w", err)
 	}

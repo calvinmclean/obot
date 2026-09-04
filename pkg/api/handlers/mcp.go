@@ -336,7 +336,7 @@ func (m *MCPHandler) ListServer(req api.Context) error {
 
 	credCtxs := make([]string, 0, len(servers.Items))
 	for _, server := range servers.Items {
-		credCtxs = append(credCtxs, mcpServerCredentialContext(server))
+		credCtxs = append(credCtxs, mcp.MCPServerCredentialContext(server))
 	}
 
 	creds, err := req.GatewayClient.ListCredentials(req.Context(), gateway.ListCredentialsOptions{
@@ -446,7 +446,7 @@ func (m *MCPHandler) GetServer(req api.Context) error {
 	// Add extracted env vars to the server definition
 	addExtractedEnvVars(&server)
 
-	credEnv, err := mcp.RuntimeCredentialSecrets(req.Context(), req.GatewayClient, mcpServerCredentialContext(server), server.Name)
+	credEnv, err := mcp.RuntimeCredentialSecrets(req.Context(), req.GatewayClient, mcp.MCPServerCredentialContext(server), server.Name)
 	if err != nil {
 		return fmt.Errorf("failed to find credential: %w", err)
 	}
@@ -1727,7 +1727,7 @@ func (m *MCPHandler) CreateServer(req api.Context) error {
 	if err := req.Create(&server); err != nil {
 		return err
 	}
-	serverCredentialContext := mcpServerCredentialContext(server)
+	serverCredentialContext := mcp.MCPServerCredentialContext(server)
 	if len(serverStaticSecrets) > 0 {
 		if err := mcp.StoreStaticCredentialSecrets(req.Context(), req.GatewayClient, serverCredentialContext, server.Name, serverStaticSecrets); err != nil {
 			_ = req.Delete(&server)
@@ -1789,7 +1789,7 @@ func (m *MCPHandler) UpdateServer(req api.Context) error {
 
 	// Shutdown any server that is using the default credentials.
 	var cred gatewaytypes.Credential
-	credentialContext := mcpServerCredentialContext(existing)
+	credentialContext := mcp.MCPServerCredentialContext(existing)
 	cred, err = req.GatewayClient.RevealCredential(req.Context(), []string{credentialContext}, existing.Name)
 	if err != nil && !errors.As(err, &gateway.CredentialNotFoundError{}) {
 		return fmt.Errorf("failed to find credential: %w", err)
@@ -2014,7 +2014,7 @@ func (m *MCPHandler) ConfigureServer(req api.Context) error {
 		}
 	}
 
-	credCtx := mcpServerCredentialContext(mcpServer)
+	credCtx := mcp.MCPServerCredentialContext(mcpServer)
 
 	if err := m.removeMCPServer(req.Context(), mcpServer); err != nil {
 		return err
@@ -2183,7 +2183,7 @@ func (m *MCPHandler) configureCompositeServer(req api.Context, compositeServer v
 
 			// Capture the updated credential
 			componentCreds[componentID] = gatewaytypes.Credential{
-				Context: fmt.Sprintf("%s-%s", req.User.GetUID(), server.Name),
+				Context: mcp.MCPServerCredentialContextForUser(req.User.GetUID(), server.Name),
 				Name:    server.Name,
 				Secrets: config.Config,
 			}
@@ -2400,7 +2400,7 @@ func (m *MCPHandler) DeconfigureServer(req api.Context) error {
 	// Add extracted env vars to the server definition
 	addExtractedEnvVars(&mcpServer)
 
-	credCtx := mcpServerCredentialContext(mcpServer)
+	credCtx := mcp.MCPServerCredentialContext(mcpServer)
 
 	if err := m.removeMCPServerAndCred(req.Context(), req.GatewayClient, mcpServer, []string{credCtx}); err != nil {
 		return err
@@ -2426,7 +2426,7 @@ func (m *MCPHandler) deconfigureCompositeServer(req api.Context, compositeServer
 	for _, component := range componentServers.Items {
 		addExtractedEnvVars(&component)
 
-		if err := m.removeMCPServerAndCred(req.Context(), req.GatewayClient, component, []string{fmt.Sprintf("%s-%s", req.User.GetUID(), component.Name)}); err != nil {
+		if err := m.removeMCPServerAndCred(req.Context(), req.GatewayClient, component, []string{mcp.MCPServerCredentialContextForUser(req.User.GetUID(), component.Name)}); err != nil {
 			return err
 		}
 	}
@@ -2453,7 +2453,7 @@ func (m *MCPHandler) deconfigureCompositeServer(req api.Context, compositeServer
 
 	var (
 		scope   = req.User.GetUID()
-		credCtx = fmt.Sprintf("%s-%s", scope, compositeServer.Name)
+		credCtx = mcp.MCPServerCredentialContextForUser(scope, compositeServer.Name)
 	)
 	if err := m.removeMCPServerAndCred(req.Context(), req.GatewayClient, compositeServer, []string{credCtx}); err != nil {
 		return err
@@ -2488,7 +2488,7 @@ func (m *MCPHandler) Reveal(req api.Context) error {
 		return m.revealCompositeServer(req, mcpServer)
 	}
 
-	credCtx := mcpServerCredentialContext(mcpServer)
+	credCtx := mcp.MCPServerCredentialContext(mcpServer)
 
 	// Non-composite: return flat env
 	cred, err := req.GatewayClient.RevealCredential(req.Context(), []string{credCtx}, mcpServer.Name)
@@ -2544,7 +2544,7 @@ func (m *MCPHandler) revealCompositeServer(req api.Context, compositeServer v1.M
 	for _, component := range componentServers.Items {
 		cred, err := req.GatewayClient.RevealCredential(
 			req.Context(),
-			[]string{fmt.Sprintf("%s-%s", req.User.GetUID(), component.Name)},
+			[]string{mcp.MCPServerCredentialContextForUser(req.User.GetUID(), component.Name)},
 			component.Name,
 		)
 		if err != nil && !errors.As(err, &gateway.CredentialNotFoundError{}) {
@@ -2891,7 +2891,7 @@ func ConfigurationTargetForConnectID(req api.Context, id, serverURL, secretBindi
 func credentialEnvForMCPServer(req api.Context, server v1.MCPServer, secretBindingAllowedLabel string) (map[string]string, error) {
 	addExtractedEnvVars(&server)
 
-	credEnv, err := mcp.RuntimeCredentialSecrets(req.Context(), req.GatewayClient, mcpServerCredentialContext(server), server.Name)
+	credEnv, err := mcp.RuntimeCredentialSecrets(req.Context(), req.GatewayClient, mcp.MCPServerCredentialContext(server), server.Name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find credential: %w", err)
 	}
@@ -3011,7 +3011,7 @@ func resolveCompositeComponents(req api.Context, composite v1.MCPServer, secretB
 	}
 
 	for _, component := range componentServers.Items {
-		credEnv, err := mcp.RuntimeCredentialSecrets(req.Context(), req.GatewayClient, fmt.Sprintf("%s-%s", component.Spec.UserID, component.Name), component.Name)
+		credEnv, err := mcp.RuntimeCredentialSecrets(req.Context(), req.GatewayClient, mcp.MCPServerCredentialContextForUser(component.Spec.UserID, component.Name), component.Name)
 		if err != nil {
 			return nil, fmt.Errorf("failed to reveal credential for component %s: %w", component.Name, err)
 		}
@@ -3081,7 +3081,7 @@ func (m *MCPHandler) ListServersFromAllSources(req api.Context) error {
 
 	var credCtxs []string
 	for _, server := range allowedServers {
-		if credCtx := catalogOrPowerUserWorkspaceServerCredentialContext(server); credCtx != "" {
+		if credCtx := mcp.CatalogOrPowerUserWorkspaceServerCredentialContext(server); credCtx != "" {
 			credCtxs = append(credCtxs, credCtx)
 		}
 	}
@@ -3167,7 +3167,7 @@ func (m *MCPHandler) GetServerFromAllSources(req api.Context) error {
 		return types.NewErrNotFound("MCP server not found")
 	}
 
-	credEnv, err := mcp.RuntimeCredentialSecrets(req.Context(), req.GatewayClient, catalogOrPowerUserWorkspaceServerCredentialContext(server), server.Name)
+	credEnv, err := mcp.RuntimeCredentialSecrets(req.Context(), req.GatewayClient, mcp.CatalogOrPowerUserWorkspaceServerCredentialContext(server), server.Name)
 	if err != nil {
 		return fmt.Errorf("failed to find credential: %w", err)
 	}
@@ -3529,7 +3529,7 @@ func (m *MCPHandler) RedeployWithK8sSettings(req api.Context) error {
 		}
 	}
 
-	credEnv, err := mcp.RuntimeCredentialSecrets(req.Context(), req.GatewayClient, mcpServerCredentialContext(server), server.Name)
+	credEnv, err := mcp.RuntimeCredentialSecrets(req.Context(), req.GatewayClient, mcp.MCPServerCredentialContext(server), server.Name)
 	if err != nil {
 		return fmt.Errorf("failed to find credential: %w", err)
 	}
@@ -3921,7 +3921,7 @@ func (m *MCPHandler) TriggerUpdate(req api.Context) error {
 	if err := m.prepareCatalogServerUpdate(req, candidate, entry, configured); err != nil {
 		return err
 	}
-	serverContext := mcpServerCredentialContext(server)
+	serverContext := mcp.MCPServerCredentialContext(server)
 	existingServerSecrets, err := mcp.StaticCredentialSecrets(req.Context(), req.GatewayClient, serverContext, server.Name)
 	if err != nil {
 		return err
@@ -4083,7 +4083,7 @@ func (m *MCPHandler) triggerCompositeUpdate(req api.Context, compositeServer v1.
 	if err := obottunnel.ValidateServerTunnelReferences(req.Context(), req.Storage, updatedManifest); err != nil {
 		return types.NewErrBadRequest("validation failed: %v", err)
 	}
-	compositeContext := mcpServerCredentialContext(compositeServer)
+	compositeContext := mcp.MCPServerCredentialContext(compositeServer)
 	existingSecrets, err := mcp.StaticCredentialSecrets(req.Context(), req.GatewayClient, compositeContext, compositeServer.Name)
 	if err != nil {
 		return err
@@ -4229,24 +4229,4 @@ func (m *MCPHandler) ListServerInstances(req api.Context) error {
 	return req.Write(types.MCPServerInstanceList{
 		Items: convertedInstances,
 	})
-}
-
-func mcpServerCredentialContext(server v1.MCPServer) string {
-	credCtx := catalogOrPowerUserWorkspaceServerCredentialContext(server)
-	if credCtx != "" {
-		return credCtx
-	}
-	return fmt.Sprintf("%s-%s", server.Spec.UserID, server.Name)
-}
-
-func catalogOrPowerUserWorkspaceServerCredentialContext(server v1.MCPServer) string {
-	var scope string
-	if server.Spec.IsCatalogServer() {
-		scope = server.Spec.MCPCatalogID
-	} else if server.Spec.IsPowerUserWorkspaceServer() {
-		scope = server.Spec.PowerUserWorkspaceID
-	} else {
-		return ""
-	}
-	return fmt.Sprintf("%s-%s", scope, server.Name)
 }

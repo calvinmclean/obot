@@ -619,7 +619,7 @@ func TestTriggerUpdateRestoresStaticCredentialWhenShutdownFails(t *testing.T) {
 		}},
 	}
 	require.NoError(t, mcp.StoreStaticCredentialSecrets(t.Context(), gatewayClient, mcp.CatalogEntryStaticCredentialContext(entry.Name), entry.Name, map[string]string{"TOKEN": "new"}))
-	serverContext := mcpServerCredentialContext(server)
+	serverContext := mcp.MCPServerCredentialContext(server)
 	require.NoError(t, mcp.StoreStaticCredentialSecrets(t.Context(), gatewayClient, serverContext, server.Name, map[string]string{"TOKEN": "old"}))
 
 	req := httptest.NewRequest(http.MethodPost, "/api/mcp-servers/server/trigger-update", nil)
