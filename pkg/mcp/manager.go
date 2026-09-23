@@ -43,6 +43,7 @@ const (
 )
 
 type Options struct {
+	MCPOpenAPIImage                   string   `usage:"Container image for the hosted OpenAPI runtime (required to deploy OpenAPI servers)"`
 	MCPBaseImage                      string   `usage:"The base image to use for MCP containers" default:"ghcr.io/obot-platform/mcp-images/stdio-wrapper:v0.26.1"`
 	MCPHTTPWebhookBaseImage           string   `usage:"The base image to use for HTTP-based MCP webhook containers" default:"ghcr.io/obot-platform/mcp-images/http-webhook-mcp-converter:v0.26.1"`
 	MCPNamespace                      string   `usage:"The namespace to use for MCP containers" default:"obot-mcp"`
