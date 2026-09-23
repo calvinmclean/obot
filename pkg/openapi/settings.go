@@ -30,6 +30,37 @@ func (s wrapperSettings) marshal() ([]byte, error) {
 	return data, nil
 }
 
+// SnapshotSettingsJSON constructs deployment settings from the saved snapshot,
+// never Source. Import-time validation and header suggestions are not repeated
+// here; FastMCP owns operation parsing. Only top-level servers are read when no
+// explicit destination was saved.
+func SnapshotSettingsJSON(config types.OpenAPIRuntimeConfig, headers []types.MCPConfig) ([]byte, error) {
+	if len(config.Schema) == 0 || len(config.Schema) > MaxSchemaBytes {
+		return nil, fmt.Errorf("a stored OpenAPI schema of at most 1 MiB is required")
+	}
+	var document *struct {
+		Servers []struct {
+			URL string `json:"url"`
+		} `json:"servers"`
+	}
+	if err := json.Unmarshal(config.Schema, &document); err != nil || document == nil {
+		return nil, fmt.Errorf("stored OpenAPI schema must be a JSON object")
+	}
+	base := config.BaseURL
+	if base == "" {
+		for _, server := range document.Servers {
+			if resolved, err := destination(server.URL); err == nil {
+				base = resolved
+				break
+			}
+		}
+		if base == "" {
+			return nil, fmt.Errorf("no usable server URL in stored schema; configure baseURL")
+		}
+	}
+	return SettingsJSON(config, &Result{BaseURL: base}, headers)
+}
+
 // SettingsJSON validates the selected credential definitions and returns exactly
 // the wrapper's settings contract. Call after Parse, before persisting/deploying.
 // Header values and prefixes are deliberately absent from the resulting JSON.

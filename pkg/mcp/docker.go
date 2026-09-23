@@ -44,6 +44,7 @@ type dockerBackend struct {
 	hostBaseURL            string
 	hostBaseURLWithPort    string
 	containerizedBaseImage string
+	openAPIImage           string
 	authEnabled            bool
 	deploymentCacheMu      sync.RWMutex
 	deploymentCache        map[string]*dockerDeploymentCacheEntry
@@ -77,6 +78,7 @@ func newDockerBackend(ctx context.Context, authEnabled bool, exposedPort int, op
 		hostBaseURL:            "http://" + host,
 		hostBaseURLWithPort:    "http://" + fmt.Sprintf("%s:%d", host, exposedPort),
 		containerizedBaseImage: opts.MCPBaseImage,
+		openAPIImage:           opts.MCPOpenAPIImage,
 		authEnabled:            authEnabled,
 		deploymentCache:        map[string]*dockerDeploymentCacheEntry{},
 		syncedFilesHash:        map[string]string{},
@@ -288,6 +290,9 @@ func (d *dockerBackend) ensureServerDeploymentSlow(ctx context.Context, server S
 }
 
 func (d *dockerBackend) ensureDeployment(ctx context.Context, server ServerConfig, mcpServerName string, containerEnv bool) (ServerConfig, error) {
+	if server.Runtime == otypes.RuntimeOpenAPI && strings.TrimSpace(d.openAPIImage) == "" {
+		return ServerConfig{}, fmt.Errorf("configure the MCP OpenAPI image before deploying an OpenAPI server")
+	}
 	if !d.authEnabled {
 		server.Audiences = nil
 	}
@@ -342,7 +347,7 @@ func (d *dockerBackend) ensureDeployment(ctx context.Context, server ServerConfi
 			}
 
 			containerPort := defaultContainerPort
-			if server.Runtime == otypes.RuntimeContainerized && server.ContainerPort != 0 {
+			if (server.Runtime == otypes.RuntimeContainerized || server.Runtime == otypes.RuntimeOpenAPI) && server.ContainerPort != 0 {
 				containerPort = server.ContainerPort
 			}
 
@@ -378,6 +383,8 @@ func (d *dockerBackend) deploymentImage(server ServerConfig) string {
 	switch server.Runtime {
 	case otypes.RuntimeUVX, otypes.RuntimeNPX:
 		return d.containerizedBaseImage
+	case otypes.RuntimeOpenAPI:
+		return d.openAPIImage
 	default:
 		return ""
 	}
@@ -858,6 +865,7 @@ func (d *dockerBackend) buildServerConfig(server ServerConfig, c *container.Summ
 		ContainerPath:           server.ContainerPath,
 		AgentName:               server.AgentName,
 		PassthroughHeaderNames:  server.PassthroughHeaderNames,
+		Headers:                 server.Headers,
 		PassthroughHeaderValues: server.PassthroughHeaderValues,
 		StartupTimeout:          server.StartupTimeout,
 		Webhooks:                server.Webhooks,
@@ -888,6 +896,9 @@ func (d *dockerBackend) createAndStartAndWaitForContainer(ctx context.Context, s
 }
 
 func (d *dockerBackend) createAndStartContainer(ctx context.Context, server ServerConfig, mcpServerName, configHash, fileEnvKeysHash string) (string, int, error) {
+	if server.Runtime == otypes.RuntimeOpenAPI && strings.TrimSpace(d.openAPIImage) == "" {
+		return "", 0, fmt.Errorf("configure the MCP OpenAPI image before deploying an OpenAPI server")
+	}
 	var (
 		volumeMounts  []mount.Mount
 		entrypoint    []string
@@ -966,7 +977,10 @@ func (d *dockerBackend) createAndStartContainer(ctx context.Context, server Serv
 
 		cmd = []string{"--listen", fmt.Sprintf(":%d", defaultContainerPort), "--config", "/config/mmmcp.yaml"}
 
-	case otypes.RuntimeContainerized:
+	case otypes.RuntimeContainerized, otypes.RuntimeOpenAPI:
+		if server.Runtime == otypes.RuntimeOpenAPI {
+			server.ContainerImage = d.openAPIImage
+		}
 		// Use specified container image or base image
 		if server.ContainerImage == "" {
 			return "", 0, fmt.Errorf("container image must be specified for containerized runtime")
