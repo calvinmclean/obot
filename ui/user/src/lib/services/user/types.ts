@@ -681,7 +681,24 @@ export interface VMCPInstanceList {
 
 // MCP runtime
 
-export type Runtime = 'npx' | 'uvx' | 'containerized' | 'remote' | 'vmcp';
+export type Runtime = 'npx' | 'uvx' | 'containerized' | 'remote' | 'vmcp' | 'openapi';
+
+export interface OpenAPISource {
+	url?: string;
+	content?: string;
+}
+export interface OpenAPIExclusion {
+	method?: string;
+	pathPattern?: string;
+	tag?: string;
+}
+export interface OpenAPIRuntimeConfig {
+	source: OpenAPISource;
+	schema?: Record<string, unknown>;
+	baseURL?: string;
+	toolSearch?: boolean;
+	exclude?: OpenAPIExclusion[];
+}
 export interface MCPConfigurationOption {
 	name: string;
 	value: string;
@@ -806,6 +823,7 @@ export interface MCPServer {
 	uvxConfig?: UVXRuntimeConfig;
 	npxConfig?: NPXRuntimeConfig;
 	containerizedConfig?: ContainerizedRuntimeConfig;
+	openAPIConfig?: OpenAPIRuntimeConfig;
 	remoteConfig?: RemoteRuntimeConfig;
 	resources?: MCPResourceRequirements;
 }
