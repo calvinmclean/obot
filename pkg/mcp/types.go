@@ -334,6 +334,14 @@ func configureRemoteRuntime(serverConfig *ServerConfig, remoteConfig *types.Remo
 			serverConfig.URL = expanded
 		}
 	}
+	missingRequiredNames = append(missingRequiredNames, configureHeaders(serverConfig, config, credEnv)...)
+	return missingRequiredNames, nil
+}
+
+// configureHeaders resolves server-owned credentials into HTTP headers. Per-user
+// credentials are attached separately by serverInstanceHeaders on each request.
+func configureHeaders(serverConfig *ServerConfig, config []types.MCPConfig, credEnv map[string]string) []string {
+	var missingRequiredNames []string
 	for _, header := range config {
 		if header.Usage != types.Header || header.UserAllowed {
 			continue
@@ -358,9 +366,11 @@ func configureRemoteRuntime(serverConfig *ServerConfig, remoteConfig *types.Remo
 		serverConfig.Headers = append(serverConfig.Headers, fmt.Sprintf("%s=%s", header.Key, val))
 	}
 
-	return missingRequiredNames, nil
+	return missingRequiredNames
 }
 
+// ServerToServerConfig resolves a manifest into runtime configuration.
+// Hosted runtime images are selected by the deployment backend.
 func ServerToServerConfig(mcpServer v1.MCPServer, audiences []string, userID, scope, mcpCatalogName string, credEnv map[string]string) (ServerConfig, []string, error) {
 	fixedConfig := slices.DeleteFunc(slices.Clone(mcpServer.Spec.Manifest.Config), func(config types.MCPConfig) bool {
 		return config.UserAllowed
@@ -459,6 +469,11 @@ func ServerToServerConfig(mcpServer v1.MCPServer, audiences []string, userID, sc
 
 	// Handle runtime-specific configuration
 	switch mcpServer.Spec.Manifest.Runtime {
+	case types.RuntimeOpenAPI:
+		missingRequiredNames, err = configureOpenAPIRuntime(&serverConfig, mcpServer.Spec.Manifest.OpenAPIConfig, mcpServer.Spec.Manifest.Config, runtimeCredEnv)
+		if err != nil {
+			return serverConfig, missingRequiredNames, err
+		}
 	case types.RuntimeUVX:
 		if err := configureUVXRuntime(&serverConfig, mcpServer.Spec.Manifest.UVXConfig, runtimeCredEnv, fileEnvVars); err != nil {
 			return serverConfig, missingRequiredNames, err
