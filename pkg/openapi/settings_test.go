@@ -115,15 +115,19 @@ func TestSettingsValidation(t *testing.T) {
 	duplicate.Key = "x-key"
 	_, err = SettingsJSON(types.OpenAPIRuntimeConfig{}, result, []types.MCPConfig{header, duplicate})
 	require.ErrorContains(t, err, "duplicate")
-	for _, mutate := range []func(*types.MCPConfig){
-		func(h *types.MCPConfig) { h.Usage = types.Env },
-		func(h *types.MCPConfig) { h.Required = false },
-		func(h *types.MCPConfig) { h.Sensitive = false },
-	} {
-		bad := header
-		mutate(&bad)
-		_, err := SettingsJSON(types.OpenAPIRuntimeConfig{}, result, []types.MCPConfig{bad})
-		require.Error(t, err)
+	bad := header
+	bad.Usage = types.Env
+	_, err = SettingsJSON(types.OpenAPIRuntimeConfig{}, result, []types.MCPConfig{bad})
+	require.ErrorContains(t, err, "must be header inputs")
+	for _, required := range []bool{true, false} {
+		for _, sensitive := range []bool{true, false} {
+			edited := header
+			edited.Required = required
+			edited.Sensitive = sensitive
+			settings, err := SettingsJSON(types.OpenAPIRuntimeConfig{}, result, []types.MCPConfig{edited})
+			require.NoError(t, err)
+			require.Contains(t, string(settings), `"credentialHeaders":["X-Key"]`)
+		}
 	}
 	header.Key = strings.Repeat("a", MaxSettingsBytes)
 	_, err = SettingsJSON(types.OpenAPIRuntimeConfig{}, result, []types.MCPConfig{header})
