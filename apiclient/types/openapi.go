@@ -2,6 +2,14 @@ package types
 
 import "encoding/json"
 
+// OpenAPIImportResponse is a validated snapshot and suggested credential inputs.
+// Importing does not create a catalog entry or store credentials.
+type OpenAPIImportResponse struct {
+	Schema           json.RawMessage `json:"schema"`
+	BaseURL          string          `json:"baseURL"`
+	SuggestedHeaders []MCPConfig     `json:"suggestedHeaders"`
+}
+
 // OpenAPISource identifies a document to import. Exactly one field must be set.
 // Content accepts JSON or YAML and is the upload/inline GitOps source.
 type OpenAPISource struct {
