@@ -664,6 +664,12 @@ export const validateRuntimeForm = (
 
 	// Runtime-specific validation
 	switch (formData.runtime) {
+		case 'openapi':
+			if (!formData.openAPIConfig?.schema) missingFields.schema = true;
+			if (formData.openAPIConfig?.exclude?.length && !formData.openAPIConfig.toolSearch) {
+				invalid.exclude = true;
+			}
+			break;
 		case 'npx':
 			if (!formData.npxConfig?.package?.trim()) {
 				missingFields.package = true;

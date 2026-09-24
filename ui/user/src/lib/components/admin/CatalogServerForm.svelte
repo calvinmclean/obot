@@ -35,6 +35,7 @@
 	import CustomConfigurationForm from '../mcp/CustomConfigurationForm.svelte';
 	import MultiUserHeadersForm from '../mcp/MultiUserHeadersForm.svelte';
 	import NpxRuntimeForm from '../mcp/NpxRuntimeForm.svelte';
+	import OpenAPIRuntimeForm from '../mcp/OpenAPIRuntimeForm.svelte';
 	import RemoteRuntimeForm from '../mcp/RemoteRuntimeForm.svelte';
 	import ResourceRuntimeForm from '../mcp/ResourceRuntimeForm.svelte';
 	import RuntimeSelector from '../mcp/RuntimeSelector.svelte';
@@ -265,6 +266,9 @@
 				shortDescription: manifest.shortDescription ?? '',
 				env: [],
 				config: manifest.config?.map((config) => ({ ...config, value: config.value ?? '' })) ?? [],
+				openAPIConfig: manifest.openAPIConfig
+					? structuredClone($state.snapshot(manifest.openAPIConfig))
+					: undefined,
 				description: manifest.description ?? '',
 				serverUserType: 'multiUser',
 				runtime: manifest.runtime,
@@ -351,6 +355,7 @@
 		formData.npxConfig = undefined;
 		formData.uvxConfig = undefined;
 		formData.containerizedConfig = undefined;
+		formData.openAPIConfig = undefined;
 		formData.remoteConfig = undefined;
 		formData.remoteServerConfig = undefined;
 
@@ -362,6 +367,9 @@
 
 		// Initialize the appropriate config based on the new runtime
 		switch (newRuntime) {
+			case 'openapi':
+				formData.openAPIConfig = { source: {} };
+				break;
 			case 'npx':
 				formData.npxConfig = defaultNpxConfig();
 				break;
@@ -464,6 +472,9 @@
 
 		// Add runtime-specific config based on the runtime type
 		switch (baseData.runtime) {
+			case 'openapi':
+				manifest.openAPIConfig = baseData.openAPIConfig;
+				break;
 			case 'npx':
 				if (baseData.npxConfig) {
 					manifest.npxConfig = {
@@ -865,6 +876,14 @@
 				{showRequired}
 				onFieldChange={updateRequired}
 			/>
+		{:else if formData.runtime === 'openapi' && formData.openAPIConfig && id}
+			<OpenAPIRuntimeForm
+				bind:config={formData.openAPIConfig}
+				bind:headers={formData.config}
+				{entity}
+				{id}
+				{readonly}
+			/>
 		{:else if formData.runtime === 'remote' && type === 'multi' && formData.remoteServerConfig}
 			<RemoteRuntimeForm
 				bind:config={formData.remoteServerConfig}
@@ -919,6 +938,7 @@
 	{#if type !== 'multi'}
 		<CatalogConfigurationForm
 			bind:config={formData.config}
+			headersOnly={formData.runtime === 'openapi'}
 			{readonly}
 			secretBindingTargets={editableSecretBindingTargets}
 			showRequired={showRequired.env}
@@ -966,7 +986,7 @@
 				type="submit"
 				data-form-action="save"
 				class="btn btn-primary flex items-center gap-1"
-				disabled={loading}
+				disabled={loading || (formData.runtime === 'openapi' && !formData.openAPIConfig?.schema)}
 				aria-busy={loading}
 				id={CATALOG_SERVER_FIELD_IDS.submitBtn}
 			>

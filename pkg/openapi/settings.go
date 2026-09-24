@@ -81,8 +81,8 @@ func SettingsJSON(config types.OpenAPIRuntimeConfig, result *Result, headers []t
 	names := make([]string, 0, len(headers))
 	seen := map[string]bool{}
 	for _, header := range headers {
-		if header.Usage != types.Header || !header.Required || !header.Sensitive {
-			return nil, fmt.Errorf("OpenAPI credentials must be required, sensitive header inputs")
+		if header.Usage != types.Header {
+			return nil, fmt.Errorf("OpenAPI credentials must be header inputs")
 		}
 		if err := validateHeader(header.Key); err != nil {
 			return nil, err
