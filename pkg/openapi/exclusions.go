@@ -52,8 +52,8 @@ func validateExclusions(config types.OpenAPIRuntimeConfig) error {
 		if rule.Method == "" && rule.PathPattern == "" && rule.Tag == "" {
 			return fmt.Errorf("exclude[%d] must contain a method, pathPattern, or tag", i)
 		}
-		if rule.Method != "" && !methods[rule.Method] {
-			return fmt.Errorf("exclude[%d].method must be an uppercase HTTP method", i)
+		if rule.Method != "" && !methods[strings.ToUpper(rule.Method)] {
+			return fmt.Errorf("exclude[%d].method must be a supported HTTP method", i)
 		}
 		if rule.Tag != "" && strings.TrimSpace(rule.Tag) == "" {
 			return fmt.Errorf("exclude[%d].tag must not be blank", i)

@@ -1,14 +1,17 @@
 package mcpserver
 
 import (
+	"bytes"
 	"cmp"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 	"maps"
 	"reflect"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/obot-platform/nah/pkg/router"
@@ -302,6 +305,8 @@ func configurationHasDrifted(serverManifest types.MCPServerManifest, entryManife
 		drifted = npxConfigHasDrifted(serverManifest.NPXConfig, entryManifest.NPXConfig, defaultDenyAllEgress)
 	case types.RuntimeContainerized:
 		drifted = containerizedConfigHasDrifted(serverManifest.ContainerizedConfig, entryManifest.ContainerizedConfig, defaultDenyAllEgress)
+	case types.RuntimeOpenAPI:
+		drifted = openAPIConfigHasDrifted(serverManifest.OpenAPIConfig, entryManifest.OpenAPIConfig)
 	case types.RuntimeRemote:
 		drifted = remoteConfigHasDrifted(serverManifest.RemoteConfig, entryManifest.RemoteConfig)
 	default:
@@ -322,6 +327,36 @@ func configurationHasDrifted(serverManifest types.MCPServerManifest, entryManife
 	}
 
 	return resourcesHasDrifted(serverManifest.Resources, entryManifest.Resources), nil
+}
+
+// Import source metadata does not affect the running wrapper. Only its stored
+// schema and settings require an explicit server upgrade.
+func openAPIConfigHasDrifted(server, entry *types.OpenAPIRuntimeConfig) bool {
+	if server == nil || entry == nil {
+		return server != entry
+	}
+	return !openAPISchemasEqual(server.Schema, entry.Schema) ||
+		server.BaseURL != entry.BaseURL ||
+		server.ToolSearch != entry.ToolSearch ||
+		!slices.EqualFunc(server.Exclude, entry.Exclude, func(a, b types.OpenAPIExclusion) bool {
+			return strings.EqualFold(a.Method, b.Method) && a.PathPattern == b.PathPattern && a.Tag == b.Tag
+		})
+}
+
+// Compare document content even if storage has reformatted or reordered JSON.
+func openAPISchemasEqual(a, b json.RawMessage) bool {
+	if bytes.Equal(a, b) {
+		return true
+	}
+	var first, second any
+	firstDecoder := json.NewDecoder(bytes.NewReader(a))
+	firstDecoder.UseNumber()
+	secondDecoder := json.NewDecoder(bytes.NewReader(b))
+	secondDecoder.UseNumber()
+	if firstDecoder.Decode(&first) != nil || secondDecoder.Decode(&second) != nil {
+		return false
+	}
+	return reflect.DeepEqual(first, second)
 }
 
 func resourcesHasDrifted(serverResources, entryResources *types.MCPResourceRequirements) bool {

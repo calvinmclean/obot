@@ -183,7 +183,7 @@ func TestReferencesAndParameters(t *testing.T) {
 }
 
 func TestExclusionValidation(t *testing.T) {
-	for _, raw := range []string{`{}`, `null`, `{"method":null}`, `{"method":"post"}`, `{"tag":" "}`} {
+	for _, raw := range []string{`{}`, `null`, `{"method":null}`, `{"method":"CONNECT"}`, `{"tag":" "}`} {
 		var rule types.OpenAPIExclusion
 		require.NoError(t, json.Unmarshal([]byte(raw), &rule))
 		require.Error(t, validateExclusions(types.OpenAPIRuntimeConfig{
@@ -194,4 +194,28 @@ func TestExclusionValidation(t *testing.T) {
 	var rule types.OpenAPIExclusion
 	require.NoError(t, json.Unmarshal([]byte(`{"method":"POST","pathPattern":"^/users$"}`), &rule))
 	require.Equal(t, "POST", rule.Method)
+}
+
+func TestExclusionMethodCase(t *testing.T) {
+	for _, method := range []string{"POST", "post", "PoSt"} {
+		t.Run(method, func(t *testing.T) {
+			config := types.OpenAPIRuntimeConfig{
+				ToolSearch: true,
+				Exclude: []types.OpenAPIExclusion{{
+					Method:      method,
+					PathPattern: "^/users$",
+				}},
+			}
+			result, err := Parse(usersSchema(t), config)
+			require.NoError(t, err)
+			config.Schema = result.Schema
+			settings, err := SnapshotSettingsJSON(config, nil)
+			require.NoError(t, err)
+			var deployed wrapperSettings
+			require.NoError(t, json.Unmarshal(settings, &deployed))
+			require.Equal(t, "POST", deployed.Exclude[0].Method)
+			require.Equal(t, "^/users$", deployed.Exclude[0].PathPattern)
+			require.Equal(t, method, config.Exclude[0].Method, "must not mutate the saved settings")
+		})
+	}
 }
