@@ -34,6 +34,9 @@ func Environment(result *Result, headers []types.MCPConfig) ([]string, error) {
 	if result == nil {
 		return nil, fmt.Errorf("a validated schema import is required")
 	}
+	if result.BaseURL == "" {
+		return nil, fmt.Errorf("no usable server URL; configure baseURL")
+	}
 	names := make([]string, 0, len(headers))
 	seen := map[string]bool{}
 	for _, header := range headers {

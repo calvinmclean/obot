@@ -20,6 +20,8 @@ import (
 	gclient "github.com/obot-platform/obot/pkg/gateway/client"
 	gatewaytypes "github.com/obot-platform/obot/pkg/gateway/types"
 	"github.com/obot-platform/obot/pkg/mcp"
+	"github.com/obot-platform/obot/pkg/openapi"
+	"github.com/obot-platform/obot/pkg/safehttp"
 	v1 "github.com/obot-platform/obot/pkg/storage/apis/obot.obot.ai/v1"
 	"github.com/obot-platform/obot/pkg/system"
 	"github.com/obot-platform/obot/pkg/tunnel"
@@ -43,6 +45,11 @@ type MCPCatalogHandler struct {
 	gatewayClient             *gclient.Client
 	acrHelper                 *accesscontrolrule.Helper
 	secretBindingAllowedLabel string
+	openAPIImporter           openAPIImporter
+}
+
+type openAPIImporter interface {
+	Import(context.Context, types.OpenAPIRuntimeConfig) (*openapi.Result, error)
 }
 
 type capacityInfoProvider interface {
@@ -60,6 +67,11 @@ func NewMCPCatalogHandler(defaultCatalogPath string, serverURL string, mcpBacken
 		gatewayClient:             gatewayClient,
 		acrHelper:                 acrHelper,
 		secretBindingAllowedLabel: secretBindingAllowedLabel,
+		openAPIImporter: openapi.NewImporter(safehttp.Options{
+			BlockLoopback:  true,
+			BlockPrivateIP: true,
+			BlockLinkLocal: true,
+		}),
 	}
 }
 
@@ -327,6 +339,9 @@ func (h *MCPCatalogHandler) CreateEntry(req api.Context) error {
 	if err := req.Read(&manifest); err != nil {
 		return types.NewErrBadRequest("failed to read entry manifest: %v", err)
 	}
+	if err := h.prepareOpenAPIEntry(req.Context(), &manifest, nil); err != nil {
+		return types.NewErrBadRequest("failed to prepare OpenAPI entry: %v", err)
+	}
 	if err := validateCatalogEntryManifestWithResourceMaximums(req, manifest, false, h.sessionManager); err != nil {
 		return types.NewErrBadRequest("failed to validate entry manifest: %v", err)
 	}
@@ -405,6 +420,9 @@ func (h *MCPCatalogHandler) UpdateEntry(req api.Context) error {
 		return types.NewErrBadRequest("failed to read entry manifest: %v", err)
 	}
 
+	if err := h.prepareOpenAPIEntry(req.Context(), &manifest, entry.Spec.Manifest.OpenAPIConfig); err != nil {
+		return types.NewErrBadRequest("failed to prepare OpenAPI entry: %v", err)
+	}
 	if err := validateCatalogEntryManifestWithResourceMaximums(req, manifest, false, h.sessionManager); err != nil {
 		return types.NewErrBadRequest("failed to validate entry manifest: %v", err)
 	}

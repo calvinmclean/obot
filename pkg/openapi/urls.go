@@ -4,7 +4,24 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+
+	"github.com/obot-platform/obot/apiclient/types"
 )
+
+// ValidateSource checks source metadata without fetching the document.
+func ValidateSource(source types.OpenAPISource) error {
+	if (source.URL == "") == (source.Content == "") {
+		return fmt.Errorf("exactly one OpenAPI source URL or content is required")
+	}
+	if len(source.Content) > MaxSchemaBytes {
+		return fmt.Errorf("schema exceeds 1 MiB")
+	}
+	if source.URL != "" {
+		_, err := sourceURL(source.URL)
+		return err
+	}
+	return nil
+}
 
 // sourceURL checks the schema location; safehttp enforces its network policy.
 func sourceURL(value string) (*url.URL, error) {
