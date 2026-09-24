@@ -1,7 +1,9 @@
 package mcpserver
 
 import (
+	"bytes"
 	"cmp"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -282,10 +284,10 @@ func configurationHasDrifted(serverManifest types.MCPServerManifest, entryManife
 		drifted = npxConfigHasDrifted(serverManifest.NPXConfig, entryManifest.NPXConfig, defaultDenyAllEgress)
 	case types.RuntimeContainerized:
 		drifted = containerizedConfigHasDrifted(serverManifest.ContainerizedConfig, entryManifest.ContainerizedConfig, defaultDenyAllEgress)
-	case types.RuntimeRemote:
-		drifted = remoteConfigHasDrifted(serverManifest.RemoteConfig, entryManifest.RemoteConfig)
 	case types.RuntimeOpenAPI:
 		drifted = openAPIConfigHasDrifted(serverManifest.OpenAPIConfig, entryManifest.OpenAPIConfig, defaultDenyAllEgress)
+	case types.RuntimeRemote:
+		drifted = remoteConfigHasDrifted(serverManifest.RemoteConfig, entryManifest.RemoteConfig)
 	default:
 		return false, fmt.Errorf("unknown runtime type: %s", serverManifest.Runtime)
 	}
@@ -304,6 +306,38 @@ func configurationHasDrifted(serverManifest types.MCPServerManifest, entryManife
 	}
 
 	return resourcesHasDrifted(serverManifest.Resources, entryManifest.Resources), nil
+}
+
+// Import source metadata does not affect the running wrapper. Only its stored
+// schema and settings require an explicit server upgrade.
+func openAPIConfigHasDrifted(server, entry *types.OpenAPIRuntimeConfig, defaultDenyAllEgress bool) bool {
+	if server == nil || entry == nil {
+		return server != entry
+	}
+	return !openAPISchemasEqual(server.Schema, entry.Schema) ||
+		server.BaseURL != entry.BaseURL ||
+		!slices.Equal(server.EgressDomains, entry.EgressDomains) ||
+		effectiveDenyAllEgress(server.DenyAllEgress, server.EgressDomains, defaultDenyAllEgress) !=
+			effectiveDenyAllEgress(entry.DenyAllEgress, entry.EgressDomains, defaultDenyAllEgress)
+}
+
+// Compare document content even if storage has reformatted or reordered JSON.
+func openAPISchemasEqual(a, b *types.OpenAPISchema) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	if bytes.Equal(a.Raw, b.Raw) {
+		return true
+	}
+	var first, second any
+	firstDecoder := json.NewDecoder(bytes.NewReader(a.Raw))
+	firstDecoder.UseNumber()
+	secondDecoder := json.NewDecoder(bytes.NewReader(b.Raw))
+	secondDecoder.UseNumber()
+	if firstDecoder.Decode(&first) != nil || secondDecoder.Decode(&second) != nil {
+		return false
+	}
+	return reflect.DeepEqual(first, second)
 }
 
 func resourcesHasDrifted(serverResources, entryResources *types.MCPResourceRequirements) bool {
@@ -363,23 +397,6 @@ func containerizedConfigHasDrifted(serverConfig, entryConfig *types.Containerize
 		serverConfig.Port != entryConfig.Port ||
 		serverConfig.Path != entryConfig.Path ||
 		!slices.Equal(serverConfig.Args, entryConfig.Args) ||
-		!slices.Equal(serverConfig.EgressDomains, entryConfig.EgressDomains) ||
-		effectiveDenyAllEgress(serverConfig.DenyAllEgress, serverConfig.EgressDomains, defaultDenyAllEgress) !=
-			effectiveDenyAllEgress(entryConfig.DenyAllEgress, entryConfig.EgressDomains, defaultDenyAllEgress)
-}
-
-// openAPIConfigHasDrifted checks if OpenAPI configuration has drifted.
-func openAPIConfigHasDrifted(serverConfig, entryConfig *types.OpenAPIRuntimeConfig, defaultDenyAllEgress bool) bool {
-	if serverConfig == nil && entryConfig == nil {
-		return false
-	}
-	if serverConfig == nil || entryConfig == nil {
-		return true
-	}
-
-	// Source location and text do not affect deployments built from the saved schema.
-	return !reflect.DeepEqual(serverConfig.Schema, entryConfig.Schema) ||
-		serverConfig.BaseURL != entryConfig.BaseURL ||
 		!slices.Equal(serverConfig.EgressDomains, entryConfig.EgressDomains) ||
 		effectiveDenyAllEgress(serverConfig.DenyAllEgress, serverConfig.EgressDomains, defaultDenyAllEgress) !=
 			effectiveDenyAllEgress(entryConfig.DenyAllEgress, entryConfig.EgressDomains, defaultDenyAllEgress)
