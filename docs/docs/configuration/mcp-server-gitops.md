@@ -461,6 +461,60 @@ remoteConfig:
         key: token
 ```
 
+### OpenAPI schemas
+
+Use the `openapi` runtime to expose an HTTP API as an MCP server. These examples use [Frankfurter](https://frankfurter.dev/), a public exchange-rate API that requires no authentication.
+
+#### Basic example
+
+This exposes the API tools without Tool Search or exclusions:
+
+```yaml
+name: Frankfurter
+description: Currency information and exchange rates
+runtime: openapi
+openAPIConfig:
+  source:
+    url: https://api.frankfurter.dev/v2/openapi.json
+  baseURL: https://api.frankfurter.dev/v2 # Optional override
+```
+
+#### Tool Search, exclusions, and a header input
+
+This enables Tool Search, excludes provider-specific routes, and shows how to configure an API token header. Frankfurter does not need this header; it is included only to demonstrate the configuration. Use a dummy value when trying this example, not a real token from another service. The example marks the input as required, so Obot will ask for a value.
+
+```yaml
+name: Frankfurter Tool Search
+description: Currency information and exchange rates with Tool Search
+runtime: openapi
+openAPIConfig:
+  source:
+    url: https://api.frankfurter.dev/v2/openapi.json
+  baseURL: https://api.frankfurter.dev/v2 # Optional override
+  toolSearch: true
+  exclude:
+    - method: GET
+      pathPattern: "^/providers/"
+config:
+  - key: Authorization
+    name: Example API token
+    description: Demonstration only; enter a dummy value for Frankfurter.
+    usage: header
+    required: true
+    sensitive: true
+    prefix: "Bearer "
+```
+
+Instead of `source.url`, use `source.content: |` with an inline JSON or YAML schema. Set exactly one source. Omit `config` for APIs without authentication. Configure every credential header declared by the schema; GitOps does not automatically add suggested headers. Supply credentials through Obot, not in the catalog file. OAuth is not supported yet.
+
+`toolSearch` defaults to false. Exclusions require Tool Search. Fields in one exclusion must all match; separate exclusions are alternatives. Path patterns are regular expressions, and tags match exactly.
+
+Every catalog sync imports the schema again, even if the Git revision or the schema's `info.version` has not changed. Obot stores a normalized JSON snapshot in `openAPIConfig.schema`; do not maintain this field in Git. Changes to the snapshot or runtime settings flag deployed servers for an explicit upgrade. Sync does not replace their deployed snapshots.
+
+If importing or validating a schema fails, the catalog reports a sync error and keeps its last good entry. Schema URLs must be publicly reachable HTTP(S) URLs without authentication or redirects. Catalog access tokens are never forwarded to schema URLs. Schemas are limited to 1 MiB and must be self-contained, without external references.
+
+The operator must configure the hosted OpenAPI wrapper image before deployment. The schema-import UI and source-aware CLI validation are separate from this sync support.
+
 ### Runtime Configuration
 
 For remote servers:

@@ -3,6 +3,7 @@ package openapi
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/obot-platform/obot/apiclient/types"
@@ -20,6 +21,12 @@ type wrapperSettings struct {
 }
 
 func (s wrapperSettings) marshal() ([]byte, error) {
+	// The wrapper expects uppercase methods. Normalize a copy so accepting
+	// mixed-case input does not mutate the caller's configuration.
+	s.Exclude = slices.Clone(s.Exclude)
+	for i := range s.Exclude {
+		s.Exclude[i].Method = strings.ToUpper(s.Exclude[i].Method)
+	}
 	data, err := json.Marshal(s)
 	if err != nil {
 		return nil, err

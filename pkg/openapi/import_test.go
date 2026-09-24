@@ -126,7 +126,7 @@ func TestExclusions(t *testing.T) {
 	require.NoError(t, json.Unmarshal(settings, &deployed))
 	require.Equal(t, config.Exclude, deployed.Exclude, "rules are passed through for FastMCP to apply")
 	for _, rule := range []types.OpenAPIExclusion{
-		{}, {Method: "post"}, {Method: "CONNECT"}, {Tag: " "},
+		{}, {Method: "CONNECT"}, {Tag: " "},
 		{PathPattern: "["}, {PathPattern: `\d+`}, {PathPattern: "(?=users)"},
 		{PathPattern: "[[:alpha:]]"},
 	} {

@@ -23,6 +23,7 @@ import (
 	"github.com/obot-platform/obot/pkg/gitcredential"
 	"github.com/obot-platform/obot/pkg/mcp"
 	catalogvalidation "github.com/obot-platform/obot/pkg/mcpcatalog"
+	"github.com/obot-platform/obot/pkg/openapi"
 	"github.com/obot-platform/obot/pkg/safehttp"
 	v1 "github.com/obot-platform/obot/pkg/storage/apis/obot.obot.ai/v1"
 	"github.com/obot-platform/obot/pkg/system"
@@ -61,6 +62,7 @@ type Handler struct {
 	remoteURLValidationConfig mcp.ValidationOptions
 	mcpBackend                string
 	mcpSessionManager         *mcp.SessionManager
+	openAPIImporter           *openapi.Importer
 }
 
 // userInfo is a wrapper around kuser.Info that includes the user's role.
@@ -89,6 +91,7 @@ func New(defaultCatalogPath, defaultSystemCatalogPath string, gatewayClient *gcl
 		remoteURLValidationConfig: validationOptions,
 		mcpBackend:                mcpSessionManager.MCPRuntimeBackend(),
 		mcpSessionManager:         mcpSessionManager,
+		openAPIImporter:           openapi.NewImporter(nil),
 	}
 }
 
@@ -648,6 +651,21 @@ func (h *Handler) readMCPCatalog(ctx context.Context, catalogName, sourceURL, to
 		}
 
 		catalogvalidation.NormalizeManifest(&entry)
+		if entry.Runtime == types.RuntimeOpenAPI {
+			if entry.OpenAPIConfig == nil {
+				errs = append(errs, fmt.Errorf("catalog entry %s: openAPIConfig is required", entry.Name))
+				continue
+			}
+			// Always import the source, even when Git and info.version are unchanged.
+			// Never forward catalog credentials to the schema URL or trust a snapshot
+			// supplied by Git. Failed imports leave the last good entry untouched.
+			result, err := h.openAPIImporter.Import(ctx, *entry.OpenAPIConfig)
+			if err != nil {
+				errs = append(errs, fmt.Errorf("failed to import OpenAPI schema for catalog entry %s: %w", entry.Name, err))
+				continue
+			}
+			entry.OpenAPIConfig.Schema = result.Schema
+		}
 		if err := catalogvalidation.ValidateManifest(ctx, entry, catalogvalidation.ValidationOptions{
 			MCP:        validationOptions,
 			MCPBackend: h.mcpBackend,

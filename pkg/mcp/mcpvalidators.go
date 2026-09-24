@@ -688,6 +688,7 @@ func getRuntimeValidators(options ValidationOptions) RuntimeValidators {
 		types.RuntimeUVX:           UVXValidator{},
 		types.RuntimeNPX:           NPXValidator{},
 		types.RuntimeContainerized: ContainerizedValidator{},
+		types.RuntimeOpenAPI:       OpenAPIValidator{},
 		types.RuntimeRemote: RemoteValidator{
 			RemoteMCPURLValidationConfig: options.RemoteMCPURLValidationConfig,
 			AllowMissingURL:              options.AllowMissingURL,
