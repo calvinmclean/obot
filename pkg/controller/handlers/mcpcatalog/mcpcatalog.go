@@ -81,11 +81,7 @@ type discardResponse struct{}
 func New(defaultCatalogPath, defaultSystemCatalogPath string, gatewayClient *gclient.Client, accessControlRuleHelper *accesscontrolrule.Helper, mcpSessionManager *mcp.SessionManager, maxRepoSizeMB int) *Handler {
 	remoteURLValidationConfig := mcpSessionManager.RemoteMCPURLValidationConfig()
 	validationOptions := mcpSessionManager.ValidationOptions()
-	safeHTTPOptions := safehttp.Options{
-		BlockLoopback:  !remoteURLValidationConfig.AllowLocalhostMCP,
-		BlockPrivateIP: !remoteURLValidationConfig.AllowPrivateIPMCP,
-		BlockLinkLocal: !remoteURLValidationConfig.AllowLinkLocalMCP,
-	}
+	safeHTTPOptions := remoteURLValidationConfig.SafeHTTPOptions()
 
 	return &Handler{
 		maxRepoSizeMB:             maxRepoSizeMB,
@@ -97,7 +93,7 @@ func New(defaultCatalogPath, defaultSystemCatalogPath string, gatewayClient *gcl
 		remoteURLValidationConfig: validationOptions,
 		mcpBackend:                mcpSessionManager.MCPRuntimeBackend(),
 		mcpSessionManager:         mcpSessionManager,
-		openAPIImporter:           openapi.NewImporter(safeHTTPOptions, false),
+		openAPIImporter:           openapi.NewImporter(safeHTTPOptions, validationOptions.DevMode),
 	}
 }
 
@@ -691,9 +687,13 @@ func (h *Handler) readMCPCatalog(ctx context.Context, catalogName, sourceURL, to
 				errs = append(errs, fmt.Errorf("catalog entry %s: openAPIConfig is required", entry.Name))
 				continue
 			}
+			if err := openapi.ValidateInput(*entry.OpenAPIConfig); err != nil {
+				errs = append(errs, fmt.Errorf("catalog entry %s: %w", entry.Name, err))
+				continue
+			}
 			// Always import the source, even when Git and info.version are unchanged.
-			// Never forward catalog credentials to the schema URL or trust a snapshot
-			// supplied by Git. Failed imports leave the last good entry untouched.
+			// Never forward catalog credentials to the schema URL. Failed imports
+			// leave the last good entry untouched.
 			result, err := h.openAPIImporter.Import(ctx, *entry.OpenAPIConfig)
 			if err != nil {
 				errs = append(errs, fmt.Errorf("failed to import OpenAPI schema for catalog entry %s: %w", entry.Name, err))
