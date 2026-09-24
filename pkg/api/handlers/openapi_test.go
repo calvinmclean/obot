@@ -104,6 +104,7 @@ security:
 			var result types.OpenAPIImportResponse
 			require.NoError(t, json.Unmarshal(response.Body.Bytes(), &result))
 			require.True(t, json.Valid(result.Schema))
+			require.Equal(t, "Example", result.SuggestedMetadata.Name)
 			require.Equal(t, "https://api.example.com/v1/", result.BaseURL)
 			require.Len(t, result.SuggestedHeaders, 1)
 			require.Equal(t, "Authorization", result.SuggestedHeaders[0].Key)

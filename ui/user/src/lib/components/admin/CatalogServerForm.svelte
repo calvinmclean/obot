@@ -17,6 +17,8 @@
 		type Runtime,
 		Group
 	} from '$lib/services';
+	import type { OpenAPIRuntimeConfig } from '$lib/services';
+	import type { OpenAPIImportResult, OpenAPIMetadata } from '$lib/services/openapi';
 	import { MAX_CATALOG_ENTRY_SHORT_DESCRIPTION_LENGTH } from '$lib/services/user/constants';
 	import { getManifestConfiguration } from '$lib/services/user/mcp';
 	import {
@@ -35,7 +37,7 @@
 	import CustomConfigurationForm from '../mcp/CustomConfigurationForm.svelte';
 	import MultiUserHeadersForm from '../mcp/MultiUserHeadersForm.svelte';
 	import NpxRuntimeForm from '../mcp/NpxRuntimeForm.svelte';
-	import OpenAPIRuntimeForm from '../mcp/OpenAPIRuntimeForm.svelte';
+	import OpenAPIConfiguration from '../mcp/OpenAPIConfiguration.svelte';
 	import RemoteRuntimeForm from '../mcp/RemoteRuntimeForm.svelte';
 	import ResourceRuntimeForm from '../mcp/ResourceRuntimeForm.svelte';
 	import RuntimeSelector from '../mcp/RuntimeSelector.svelte';
@@ -93,6 +95,27 @@
 	let secretBindingTargets = $state<MCPAllowedSecretBindingTarget[]>();
 
 	let formData = $state<RuntimeFormData>(untrack(() => convertToFormData(entry)));
+	let importedBaseURL = $state('');
+
+	function completeOpenAPIImport(
+		config: OpenAPIRuntimeConfig,
+		result: OpenAPIImportResult,
+		metadata: OpenAPIMetadata
+	) {
+		formData.openAPIConfig = config;
+		importedBaseURL = result.baseURL;
+		formData.config ??= [];
+		for (const header of result.suggestedHeaders) {
+			if (
+				!formData.config.some((existing) => existing.key.toLowerCase() === header.key.toLowerCase())
+			) {
+				formData.config.push(header);
+			}
+		}
+		for (const key of ['name', 'description', 'shortDescription', 'icon'] as const) {
+			if (metadata[key] !== undefined) formData[key] = metadata[key];
+		}
+	}
 
 	const isAtLeastPowerUserPlus = $derived(profile.current?.groups.includes(Group.POWERUSER_PLUS));
 	const canConfigureTunnels = $derived(
@@ -350,6 +373,7 @@
 	// Runtime change handler
 	function handleRuntimeChange(newRuntime: Runtime) {
 		formData.runtime = newRuntime;
+		importedBaseURL = '';
 
 		// Clear all runtime configs first
 		formData.npxConfig = undefined;
@@ -877,12 +901,19 @@
 				onFieldChange={updateRequired}
 			/>
 		{:else if formData.runtime === 'openapi' && formData.openAPIConfig && id}
-			<OpenAPIRuntimeForm
+			<OpenAPIConfiguration
 				bind:config={formData.openAPIConfig}
-				bind:headers={formData.config}
+				{importedBaseURL}
 				{entity}
 				{id}
 				{readonly}
+				current={{
+					name: formData.name,
+					description: formData.description,
+					shortDescription: formData.shortDescription,
+					icon: formData.icon
+				}}
+				onComplete={completeOpenAPIImport}
 			/>
 		{:else if formData.runtime === 'remote' && type === 'multi' && formData.remoteServerConfig}
 			<RemoteRuntimeForm

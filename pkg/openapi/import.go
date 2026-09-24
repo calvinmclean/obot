@@ -46,9 +46,10 @@ func NewImporter(allowList []string) *Importer {
 // Result contains the stored schema, resolved API destination, and suggested
 // credential inputs. MCP tools are generated and listed by the hosted wrapper.
 type Result struct {
-	Schema           json.RawMessage
-	BaseURL          string
-	SuggestedHeaders []types.MCPConfig
+	Schema            json.RawMessage
+	BaseURL           string
+	SuggestedHeaders  []types.MCPConfig
+	SuggestedMetadata types.OpenAPIMetadata
 }
 
 // Import always reads Source anew, ignoring any previous Schema snapshot.

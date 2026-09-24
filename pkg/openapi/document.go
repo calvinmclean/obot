@@ -44,7 +44,7 @@ func inspect(raw map[string]any, canonical []byte, config types.OpenAPIRuntimeCo
 	if len(document.Webhooks) > 0 {
 		return nil, fmt.Errorf("OpenAPI webhooks are unsupported")
 	}
-	result := &Result{}
+	result := &Result{SuggestedMetadata: suggestedMetadata(document.Info, config.Source.URL)}
 	if config.BaseURL != "" {
 		result.BaseURL, err = destination(config.BaseURL)
 		if err != nil {

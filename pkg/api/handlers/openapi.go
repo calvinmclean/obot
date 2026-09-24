@@ -48,9 +48,10 @@ func (h *MCPCatalogHandler) ImportOpenAPI(req api.Context) error {
 		return types.NewErrBadRequest("failed to import OpenAPI schema: %v", err)
 	}
 	return req.Write(types.OpenAPIImportResponse{
-		Schema:           result.Schema,
-		BaseURL:          result.BaseURL,
-		SuggestedHeaders: append([]types.MCPConfig{}, result.SuggestedHeaders...),
+		Schema:            result.Schema,
+		BaseURL:           result.BaseURL,
+		SuggestedHeaders:  append([]types.MCPConfig{}, result.SuggestedHeaders...),
+		SuggestedMetadata: result.SuggestedMetadata,
 	})
 }
 
