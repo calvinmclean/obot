@@ -8,7 +8,12 @@ import { beforeEach, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { page } from 'vitest/browser';
 
-const schema = { openapi: '3.1.0', info: { title: 'Example', version: '1' }, paths: {} };
+const schema = {
+	openapi: '3.1.0',
+	info: { title: 'Example', version: '1' },
+	servers: [{ url: 'https://example.com/api' }],
+	paths: {}
+};
 const sourceURL = 'https://example.com/openapi.json';
 const suggestedHeader = {
 	key: 'Authorization',
@@ -39,7 +44,8 @@ function mockImport(collection = 'mcp-catalogs') {
 			return HttpResponse.json({
 				schema,
 				baseURL: 'https://example.com/api',
-				suggestedHeaders: [suggestedHeader]
+				suggestedHeaders: [suggestedHeader],
+				suggestedMetadata: { name: 'Example' }
 			});
 		})
 	);
@@ -56,7 +62,7 @@ it('imports before saving and keeps the snapshot, header prefix, and exclusion s
 		})
 	);
 	await openForm();
-	await expect.element(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+	await expect.element(page.getByRole('button', { name: 'Save', exact: true })).toBeVisible();
 	await page.getByLabelText('Schema URL', { exact: true }).fill(sourceURL);
 	await page.getByRole('button', { name: 'Import schema', exact: true }).click();
 	await expect.element(page.getByRole('status')).toHaveTextContent('Schema imported');
@@ -85,16 +91,197 @@ it('imports before saving and keeps the snapshot, header prefix, and exclusion s
 	});
 });
 
-it('uses the workspace import endpoint and invalidates the snapshot after changing its source', async () => {
+it('prefills new entry metadata and displays the schema base URL only as a placeholder', async () => {
+	const importedSchema = {
+		...schema,
+		info: {
+			title: 'Raw schema title (use API suggestions instead)',
+			version: '1',
+			summary: 'Find documentation',
+			description: 'Full API description',
+			'x-logo': { url: 'https://example.com/logo.svg' }
+		}
+	};
+	worker.use(
+		http.post('/api/mcp-catalogs/test/openapi/import', () =>
+			HttpResponse.json({
+				schema: importedSchema,
+				suggestedMetadata: {
+					name: 'Context API',
+					shortDescription: 'Find documentation',
+					description: 'Full API description',
+					icon: 'https://example.com/logo.svg'
+				},
+				baseURL: 'https://example.com/api',
+				suggestedHeaders: []
+			})
+		)
+	);
+	const saved = vi.fn();
+	worker.use(
+		http.post('/api/mcp-catalogs/test/entries', async ({ request }) => {
+			saved(await request.json());
+			return HttpResponse.json(createMCPCatalogEntryResponse);
+		})
+	);
+	await openForm();
+	await expect.element(page.getByRole('dialog')).not.toBeInTheDocument();
+	await expect.element(page.getByLabelText('API request base URL')).not.toBeInTheDocument();
+	await expect
+		.element(page.getByText('Where tool calls are sent.', { exact: false }))
+		.not.toBeInTheDocument();
+	await expect.element(page.getByCSS(`#${CATALOG_SERVER_FIELD_IDS.name}`)).toBeVisible();
+	await page.getByLabelText('Schema URL', { exact: true }).fill(sourceURL);
+	await page.getByRole('button', { name: 'Import schema', exact: true }).click();
+	await expect
+		.element(page.getByCSS(`#${CATALOG_SERVER_FIELD_IDS.name}`))
+		.toHaveValue('Context API');
+	await expect
+		.element(page.getByCSS(`#${CATALOG_SERVER_FIELD_IDS.shortDescription}`))
+		.toHaveValue('Find documentation');
+	await expect
+		.element(page.getByCSS(`#${CATALOG_SERVER_FIELD_IDS.icon}`))
+		.toHaveValue('https://example.com/logo.svg');
+	await expect.element(page.getByLabelText('API request base URL')).toHaveValue('');
+	await expect
+		.element(page.getByLabelText('API request base URL'))
+		.toHaveAttribute('placeholder', 'https://example.com/api');
+	await page.getByRole('button', { name: 'Save', exact: true }).click();
+	await vi.waitFor(() => expect(saved).toHaveBeenCalled());
+	expect(saved.mock.calls[0][0]).toMatchObject({
+		description: 'Full API description',
+		openAPIConfig: { schema: importedSchema }
+	});
+	expect(saved.mock.calls[0][0].openAPIConfig.baseURL).toBeUndefined();
+});
+
+it('keeps existing details visible when OpenAPI is selected and confirms suggestions after import', async () => {
+	mockImport();
+	await render(CatalogServerForm, { id: 'test', entity: 'catalog', type: 'hosted' });
+	await page.getByCSS(`#${CATALOG_SERVER_FIELD_IDS.name}`).fill('My server');
+	await page.getByCSS('#npx-package').fill('my-package');
+	await page.getByCSS('#runtime-selector').click();
+	await page.getByRole('button', { name: 'OpenAPI', exact: true }).click();
+	await expect.element(page.getByRole('dialog')).not.toBeInTheDocument();
+	await expect.element(page.getByCSS(`#${CATALOG_SERVER_FIELD_IDS.name}`)).toHaveValue('My server');
+	await page.getByLabelText('Schema URL', { exact: true }).fill(sourceURL);
+	await page.getByRole('button', { name: 'Import schema', exact: true }).click();
+	await expect
+		.element(page.getByRole('heading', { name: 'Use details from schema?' }))
+		.toBeVisible();
+	await expect.element(page.getByRole('checkbox', { name: 'Name', exact: true })).not.toBeChecked();
+	await page.getByRole('button', { name: 'Keep current values', exact: true }).click();
+	await expect.element(page.getByCSS(`#${CATALOG_SERVER_FIELD_IDS.name}`)).toHaveValue('My server');
+});
+
+it('only replaces selected metadata fields after importing a replacement', async () => {
+	const nextSchema = {
+		...schema,
+		info: {
+			title: 'New name',
+			version: '2',
+			summary: 'New summary',
+			description: 'New description'
+		}
+	};
+	worker.use(
+		http.post('/api/mcp-catalogs/test/openapi/import', () =>
+			HttpResponse.json({
+				schema: nextSchema,
+				suggestedMetadata: {
+					name: 'New name',
+					shortDescription: 'New summary',
+					description: 'New description'
+				},
+				baseURL: 'https://example.com/api',
+				suggestedHeaders: []
+			})
+		)
+	);
+	const entry = {
+		...createMCPCatalogEntryResponse,
+		manifest: {
+			...createMCPCatalogEntryResponse.manifest,
+			name: 'My name',
+			shortDescription: 'My summary',
+			description: 'My description',
+			runtime: 'openapi',
+			openAPIConfig: { source: { url: sourceURL }, schema, baseURL: 'https://override.example.com' }
+		}
+	} as MCPCatalogEntry;
+	await render(CatalogServerForm, { id: 'test', entity: 'catalog', entry });
+	await page.getByRole('button', { name: 'Replace schema', exact: true }).click();
+	await page.getByRole('button', { name: 'Import schema', exact: true }).click();
+	await expect
+		.element(page.getByRole('heading', { name: 'Use details from schema?' }))
+		.toBeVisible();
+	await expect.element(page.getByRole('checkbox', { name: 'Name', exact: true })).not.toBeChecked();
+	await expect.element(page.getByText('Current: My name', { exact: true })).toBeVisible();
+	await page.getByRole('checkbox', { name: 'Short description', exact: true }).click();
+	await page.getByRole('button', { name: 'Apply selected', exact: true }).click();
+	await expect.element(page.getByCSS(`#${CATALOG_SERVER_FIELD_IDS.name}`)).toHaveValue('My name');
+	await expect
+		.element(page.getByCSS(`#${CATALOG_SERVER_FIELD_IDS.shortDescription}`))
+		.toHaveValue('New summary');
+	await expect
+		.element(page.getByLabelText('API request base URL'))
+		.toHaveValue('https://override.example.com');
+	expect(entry.manifest.openAPIConfig?.schema).toEqual(schema);
+});
+
+it('shows an applied description in the already-mounted editor', async () => {
+	const saved = vi.fn();
+	worker.use(
+		http.post('/api/mcp-catalogs/test/entries', async ({ request }) => {
+			saved(await request.json());
+			return HttpResponse.json(createMCPCatalogEntryResponse);
+		})
+	);
+	worker.use(
+		http.post('/api/mcp-catalogs/test/openapi/import', () =>
+			HttpResponse.json({
+				schema,
+				baseURL: 'https://example.com/api',
+				suggestedHeaders: [],
+				suggestedMetadata: { name: 'Example', description: 'Imported API description' }
+			})
+		)
+	);
+	await openForm();
+	await page.getByCSS(`#${CATALOG_SERVER_FIELD_IDS.name}`).fill('My API');
+	await page.getByLabelText('Schema URL', { exact: true }).fill(sourceURL);
+	await page.getByRole('button', { name: 'Import schema', exact: true }).click();
+	await expect
+		.element(page.getByRole('checkbox', { name: 'Description', exact: true }))
+		.toBeChecked();
+	await page.getByRole('checkbox', { name: 'Name', exact: true }).click();
+	await page.getByRole('button', { name: 'Apply selected', exact: true }).click();
+	await expect.element(page.getByRole('dialog')).not.toBeInTheDocument();
+	await expect.element(page.getByCSS(`#${CATALOG_SERVER_FIELD_IDS.name}`)).toHaveValue('Example');
+	await expect
+		.element(page.getByCSS(`#${CATALOG_SERVER_FIELD_IDS.description}-container .cm-content`))
+		.toHaveTextContent('Imported API description');
+	await page.getByCSS(`#${CATALOG_SERVER_FIELD_IDS.shortDescription}`).fill('API summary');
+	await page.getByRole('button', { name: 'Save', exact: true }).click();
+	await vi.waitFor(() =>
+		expect(saved).toHaveBeenCalledWith(
+			expect.objectContaining({ name: 'Example', description: 'Imported API description' })
+		)
+	);
+});
+
+it('uses the workspace import endpoint and stages source changes without losing the current snapshot', async () => {
 	const imported = mockImport('workspaces');
 	await openForm('workspace');
 	await page.getByLabelText('Schema URL', { exact: true }).fill(sourceURL);
 	await page.getByRole('button', { name: 'Import schema', exact: true }).click();
 	await expect.element(page.getByRole('status')).toHaveTextContent('Schema imported');
 	expect(imported).toHaveBeenCalledOnce();
+	await page.getByRole('button', { name: 'Replace schema', exact: true }).click();
 	await page.getByLabelText('Schema URL', { exact: true }).fill('https://example.com/new.json');
-	await expect.element(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
-	await expect.element(page.getByRole('status')).not.toBeInTheDocument();
+	await page.getByRole('button', { name: 'Cancel import', exact: true }).click();
+	await expect.element(page.getByText(sourceURL, { exact: true })).toBeVisible();
+	await expect.element(page.getByRole('status')).toHaveTextContent('Schema imported');
 });
 
 it('shows import errors and allows retry without creating an entry', async () => {
@@ -110,7 +297,7 @@ it('shows import errors and allows retry without creating an entry', async () =>
 	await expect
 		.element(page.getByRole('alert'))
 		.toHaveTextContent('schema must be a JSON or YAML document');
-	await expect.element(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+	await expect.element(page.getByRole('button', { name: 'Save', exact: true })).toBeVisible();
 	mockImport();
 	await page.getByRole('button', { name: 'Import schema', exact: true }).click();
 	await expect.element(page.getByRole('status')).toHaveTextContent('Schema imported');
@@ -155,7 +342,12 @@ it.each([
 		worker.use(
 			http.post('/api/mcp-catalogs/test/openapi/import', async ({ request }) => {
 				imported(await request.json());
-				return HttpResponse.json({ schema, baseURL: 'https://example.com', suggestedHeaders: [] });
+				return HttpResponse.json({
+					schema,
+					baseURL: 'https://example.com',
+					suggestedHeaders: [],
+					suggestedMetadata: { name: 'Example' }
+				});
 			})
 		);
 		await openForm();
@@ -185,6 +377,9 @@ it('shows an existing uploaded schema without asking users to select it again', 
 			}
 		} as MCPCatalogEntry
 	});
+	await expect.element(page.getByText('Uploaded schema', { exact: true })).toBeVisible();
+	await expect.element(page.getByRole('status')).toHaveTextContent('Schema imported');
+	await page.getByRole('button', { name: 'Replace schema', exact: true }).click();
 	await expect.element(page.getByText('Saved schema', { exact: true })).toBeVisible();
 	await expect
 		.element(page.getByText('The existing schema is kept unless you choose a replacement.'))
@@ -192,7 +387,6 @@ it('shows an existing uploaded schema without asking users to select it again', 
 	await expect
 		.element(page.getByRole('button', { name: 'Replace file', exact: true }))
 		.toBeEnabled();
-	await expect.element(page.getByRole('status')).toHaveTextContent('Schema imported');
 });
 
 it('opens the file picker only from the choose button, not the heading', async () => {
@@ -214,7 +408,10 @@ it('opens the file picker only from the choose button, not the heading', async (
 });
 
 it('allows any method and removes exclusions using the icon button', async () => {
+	mockImport();
 	await openForm();
+	await page.getByLabelText('Schema URL', { exact: true }).fill(sourceURL);
+	await page.getByRole('button', { name: 'Import schema', exact: true }).click();
 	await page.getByLabelText('Enable Tool Search').click();
 	await page.getByRole('button', { name: 'Add exclusion' }).click();
 	const method = page.getByRole('combobox', { name: 'Method', exact: true });
@@ -260,7 +457,10 @@ it('shows stored configuration read-only without offering import or exclusion ed
 			}
 		} as MCPCatalogEntry
 	});
-	await expect.element(page.getByLabelText('Schema URL', { exact: true })).toBeDisabled();
+	await expect.element(page.getByText(sourceURL, { exact: true })).toBeVisible();
+	await expect
+		.element(page.getByRole('button', { name: 'Replace schema', exact: true }))
+		.not.toBeInTheDocument();
 	await expect.element(page.getByLabelText('Enable Tool Search')).toBeDisabled();
 	await expect.element(page.getByLabelText('Tag', { exact: true })).toBeDisabled();
 	await expect
@@ -282,15 +482,17 @@ it('keeps edited header flags and prefixes and avoids duplicates on another impo
 	await expect.element(sensitive).toBeChecked();
 	await required.click();
 	await sensitive.click();
+	await page.getByRole('button', { name: 'Replace schema', exact: true }).click();
 	await page.getByRole('button', { name: 'Import schema', exact: true }).click();
 	await vi.waitFor(() => expect(imported).toHaveBeenCalledTimes(2));
+	await page.getByRole('button', { name: 'Keep current values', exact: true }).click();
 	await expect.element(page.getByRole('status')).toHaveTextContent('Schema imported');
 	await expect.element(page.getByLabelText('Value Prefix')).toHaveValue('Token ');
 	await expect.element(required).not.toBeChecked();
 	await expect.element(sensitive).not.toBeChecked();
 });
 
-it('locks source edits during import and ignores the result after changing runtimes', async () => {
+it('locks source edits during import and ignores the result after switching runtime', async () => {
 	let finishImport!: () => void;
 	const responseReady = new Promise<void>((resolve) => {
 		finishImport = resolve;
@@ -301,7 +503,8 @@ it('locks source edits during import and ignores the result after changing runti
 			return HttpResponse.json({
 				schema,
 				baseURL: 'https://example.com',
-				suggestedHeaders: [suggestedHeader]
+				suggestedHeaders: [suggestedHeader],
+				suggestedMetadata: { name: 'Example' }
 			});
 		})
 	);
@@ -309,7 +512,7 @@ it('locks source edits during import and ignores the result after changing runti
 	await page.getByLabelText('Schema URL', { exact: true }).fill(sourceURL);
 	await page.getByRole('button', { name: 'Import schema', exact: true }).click();
 	await expect.element(page.getByLabelText('Schema URL', { exact: true })).toBeDisabled();
-	await expect.element(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+	await expect.element(page.getByRole('button', { name: 'Save', exact: true })).toBeVisible();
 	await page.getByCSS('#runtime-selector').click();
 	await page.getByRole('button', { name: 'NPX', exact: true }).click();
 	finishImport();
