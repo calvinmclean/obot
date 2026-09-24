@@ -120,6 +120,7 @@ var (
 			"GET    /api/workspaces/{workspace_id}",
 			"GET    /api/workspaces/{workspace_id}/entries",
 			"POST   /api/workspaces/{workspace_id}/entries",
+			"POST   /api/workspaces/{workspace_id}/openapi/import",
 			"DELETE /api/workspaces/{workspace_id}/entries/{entry_id}",
 			"GET    /api/workspaces/{workspace_id}/entries/{entry_id}",
 			"PUT    /api/workspaces/{workspace_id}/entries/{entry_id}",

@@ -22,6 +22,36 @@ func usersSchema(t *testing.T) []byte {
 	return data
 }
 
+func TestSchemaParseErrorDetails(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		content string
+		want    string
+	}{
+		{
+			name:    "empty",
+			content: "  ",
+			want:    "schema content is empty",
+		},
+		{
+			name:    "syntax",
+			content: "info:\n  title: [secret-marker\nversion: 1",
+			want:    "did not find expected",
+		},
+		{
+			name:    "unknown anchor",
+			content: "info: *secret-marker",
+			want:    "unknown YAML anchor",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := Parse([]byte(test.content), types.OpenAPIRuntimeConfig{})
+			require.ErrorContains(t, err, test.want)
+			require.NotContains(t, err.Error(), "secret-marker")
+		})
+	}
+}
+
 func documentWith(t *testing.T, change func(map[string]any)) []byte {
 	t.Helper()
 	document, _, err := normalize(usersSchema(t))
