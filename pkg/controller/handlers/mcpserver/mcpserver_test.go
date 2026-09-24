@@ -51,7 +51,6 @@ func TestOpenAPIConfigurationDrift(t *testing.T) {
 			name:    "source changed",
 			server:  config(`{}`, "https://example.com/schema", ""),
 			catalog: config(`{}`, "https://example.com/other", ""),
-			drifted: true,
 		},
 		{
 			name:    "override changed",
