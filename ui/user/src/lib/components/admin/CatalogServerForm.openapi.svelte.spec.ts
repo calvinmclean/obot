@@ -64,12 +64,10 @@ it('imports before saving and keeps the snapshot, header prefix, and exclusion s
 	await expect.element(page.getByLabelText('Value Prefix')).toHaveValue('Bearer ');
 	await page.getByLabelText('Enable Tool Search').click();
 	await page.getByRole('button', { name: 'Add exclusion' }).click();
-	await page.getByLabelText('Method', { exact: true }).fill('POST');
+	await page.getByLabelText('Method', { exact: true }).selectOptions('POST');
 	await page.getByLabelText('Path pattern (regex)').fill('^/users$');
 	await page.getByLabelText('Tag', { exact: true }).fill('internal');
-	await page
-		.getByLabelText('API base URL override (optional)')
-		.fill('https://override.example.com');
+	await page.getByLabelText('API request base URL').fill('https://override.example.com');
 	await page.getByCSS(`#${CATALOG_SERVER_FIELD_IDS.name}`).fill('Example API');
 	await page.getByCSS(`#${CATALOG_SERVER_FIELD_IDS.shortDescription}`).fill('An example API');
 	await page.getByRole('button', { name: 'Save', exact: true }).click();
@@ -162,9 +160,11 @@ it.each([
 		);
 		await openForm();
 		await page.getByLabelText('Schema source').selectOptions('file');
-		await page
-			.getByLabelText('Schema file (JSON or YAML, up to 1 MiB)')
-			.upload(new File([content], name));
+		await page.getByLabelText('Schema file', { exact: true }).upload(new File([content], name));
+		await expect.element(page.getByText(name, { exact: true })).toBeVisible();
+		await expect
+			.element(page.getByRole('button', { name: 'Replace file', exact: true }))
+			.toBeVisible();
 		await page.getByRole('button', { name: 'Import schema', exact: true }).click();
 		await expect.element(page.getByRole('status')).toHaveTextContent('Schema imported');
 		expect(imported).toHaveBeenCalledWith({ source: { content } });
@@ -172,12 +172,67 @@ it.each([
 	}
 );
 
+it('shows an existing uploaded schema without asking users to select it again', async () => {
+	await render(CatalogServerForm, {
+		id: 'test',
+		entity: 'catalog',
+		entry: {
+			...createMCPCatalogEntryResponse,
+			manifest: {
+				...createMCPCatalogEntryResponse.manifest,
+				runtime: 'openapi',
+				openAPIConfig: { source: { content: JSON.stringify(schema) }, schema }
+			}
+		} as MCPCatalogEntry
+	});
+	await expect.element(page.getByText('Saved schema', { exact: true })).toBeVisible();
+	await expect
+		.element(page.getByText('The existing schema is kept unless you choose a replacement.'))
+		.toBeVisible();
+	await expect
+		.element(page.getByRole('button', { name: 'Replace file', exact: true }))
+		.toBeEnabled();
+	await expect.element(page.getByRole('status')).toHaveTextContent('Schema imported');
+});
+
+it('opens the file picker only from the choose button, not the heading', async () => {
+	await openForm();
+	await page.getByLabelText('Schema source').selectOptions('file');
+	const pickerClick = vi.fn();
+	page
+		.getByLabelText('Schema file', { exact: true })
+		.element()
+		.addEventListener('click', (event) => {
+			// Observe activation without opening an operating-system dialog in the test.
+			event.preventDefault();
+			pickerClick();
+		});
+	await page.getByText('Schema file', { exact: true }).click();
+	expect(pickerClick).not.toHaveBeenCalled();
+	await page.getByRole('button', { name: 'Choose file', exact: true }).click();
+	expect(pickerClick).toHaveBeenCalledOnce();
+});
+
+it('allows any method and removes exclusions using the icon button', async () => {
+	await openForm();
+	await page.getByLabelText('Enable Tool Search').click();
+	await page.getByRole('button', { name: 'Add exclusion' }).click();
+	const method = page.getByRole('combobox', { name: 'Method', exact: true });
+	await expect.element(method).toHaveValue('');
+	await method.selectOptions('DELETE');
+	await expect.element(method).toHaveValue('DELETE');
+	await method.selectOptions('');
+	await expect.element(method).toHaveValue('');
+	await page.getByRole('button', { name: 'Remove exclusion 1', exact: true }).click();
+	await expect.element(method).not.toBeInTheDocument();
+});
+
 it('rejects oversized files before import', async () => {
 	const imported = mockImport();
 	await openForm();
 	await page.getByLabelText('Schema source').selectOptions('file');
 	await page
-		.getByLabelText('Schema file (JSON or YAML, up to 1 MiB)')
+		.getByLabelText('Schema file', { exact: true })
 		.upload(new File([new Uint8Array(1024 * 1024 + 1)], 'large.json'));
 	await expect.element(page.getByRole('alert')).toHaveTextContent('no larger than 1 MiB');
 	await expect

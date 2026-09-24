@@ -1,6 +1,8 @@
 <script lang="ts">
 	import type { MCPConfig, OpenAPIRuntimeConfig } from '$lib/services';
 	import { importOpenAPI } from '$lib/services/openapi';
+	import IconButton from '../primitives/IconButton.svelte';
+	import { FileUp, Trash2 } from '@lucide/svelte';
 	import { onDestroy, untrack } from 'svelte';
 
 	interface Props {
@@ -22,6 +24,7 @@
 	let error = $state('');
 	let resolvedBaseURL = $state('');
 	let fileName = $state('');
+	let fileInput = $state<HTMLInputElement>();
 	let disposed = false;
 	onDestroy(() => {
 		disposed = true;
@@ -34,11 +37,11 @@
 	}
 
 	async function upload(event: Event) {
+		const file = (event.currentTarget as HTMLInputElement).files?.[0];
+		if (!file) return;
 		invalidate();
 		config.source = {};
-		const file = (event.currentTarget as HTMLInputElement).files?.[0];
-		fileName = file?.name ?? '';
-		if (!file) return;
+		fileName = file.name;
 		if (file.size > 1024 * 1024) {
 			error = 'Schema files must be no larger than 1 MiB.';
 			return;
@@ -111,20 +114,60 @@
 				/>
 			</div>
 		{:else if !readonly}
-			<div class="flex flex-col gap-1">
-				<label for="openapi-source-file">Schema file (JSON or YAML, up to 1 MiB)</label>
-				<input id="openapi-source-file" type="file" accept=".json,.yaml,.yml" onchange={upload} />
-				{#if fileName}<p class="text-xs">{fileName}</p>{/if}
+			<div class="flex flex-col gap-2">
+				<p id="openapi-source-file-label" class="text-sm font-light">Schema file</p>
+				<input
+					bind:this={fileInput}
+					id="openapi-source-file"
+					type="file"
+					class="hidden"
+					accept=".json,.yaml,.yml"
+					aria-labelledby="openapi-source-file-label"
+					aria-describedby="openapi-file-hint"
+					onchange={upload}
+				/>
+				<div
+					class="border-base-300 bg-base-200 flex flex-wrap items-center gap-3 rounded-lg border p-4"
+				>
+					<FileUp class="text-muted-content size-5 shrink-0" aria-hidden="true" />
+					<div class="min-w-0 flex-1 basis-40">
+						<p class="text-sm font-medium break-all">
+							{fileName || (config.source.content ? 'Saved schema' : 'Choose an OpenAPI schema')}
+						</p>
+						<p id="openapi-file-hint" class="text-muted-content mt-1 text-xs">
+							{#if !fileName && config.source.content}
+								The existing schema is kept unless you choose a replacement.
+							{:else}
+								JSON or YAML · Up to 1 MiB
+							{/if}
+						</p>
+					</div>
+					<button
+						type="button"
+						class="btn btn-secondary btn-sm shrink-0"
+						onclick={() => fileInput?.click()}
+					>
+						{fileName || config.source.content ? 'Replace file' : 'Choose file'}
+					</button>
+				</div>
 			</div>
 		{/if}
-		<div class="flex flex-col gap-1">
-			<label for="openapi-base-url">API base URL override (optional)</label>
+		<div class="border-base-300 mt-2 flex flex-col gap-2 border-t pt-4">
+			<div class="flex items-center gap-2">
+				<label for="openapi-base-url" class="text-sm font-medium">API request base URL</label>
+				<span class="text-muted-content bg-base-200 rounded px-2 py-0.5 text-xs">Optional</span>
+			</div>
+			<p id="openapi-base-url-hint" class="text-muted-content text-xs">
+				Where tool calls are sent, not the schema file URL. Leave blank to use the API server URL
+				defined in the schema.
+			</p>
 			<input
 				id="openapi-base-url"
 				class="text-input-filled"
 				type="url"
 				bind:value={config.baseURL}
-				placeholder="Use the server URL from the schema"
+				placeholder="https://api.example.com/v1"
+				aria-describedby="openapi-base-url-hint"
 			/>
 		</div>
 		{#if !readonly}
@@ -173,12 +216,19 @@
 			{#each config.exclude ?? [] as rule, i (i)}
 				<div class="flex flex-col gap-2 rounded border p-3">
 					<label for={`openapi-method-${i}`}>Method</label>
-					<input
+					<select
 						id={`openapi-method-${i}`}
-						class="text-input-filled"
-						placeholder="POST"
-						bind:value={rule.method}
-					/>
+						class="select w-full"
+						value={rule.method?.toUpperCase() ?? ''}
+						onchange={(event) => {
+							rule.method = event.currentTarget.value || undefined;
+						}}
+					>
+						<option value="">Any method</option>
+						{#each ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS', 'TRACE'] as method (method)}
+							<option value={method}>{method}</option>
+						{/each}
+					</select>
 					<label for={`openapi-path-${i}`}>Path pattern (regex)</label>
 					<input
 						id={`openapi-path-${i}`}
@@ -193,11 +243,17 @@
 						placeholder="internal"
 						bind:value={rule.tag}
 					/>
-					{#if !readonly}<button
-							type="button"
-							class="btn btn-ghost self-start"
-							onclick={() => config.exclude?.splice(i, 1)}>Remove exclusion {i + 1}</button
-						>{/if}
+					{#if !readonly}
+						<IconButton
+							class="self-end"
+							variant="danger"
+							aria-label={`Remove exclusion ${i + 1}`}
+							title="Remove exclusion"
+							onclick={() => config.exclude?.splice(i, 1)}
+						>
+							<Trash2 class="size-4" aria-hidden="true" />
+						</IconButton>
+					{/if}
 				</div>
 			{/each}
 			{#if !readonly}<button
