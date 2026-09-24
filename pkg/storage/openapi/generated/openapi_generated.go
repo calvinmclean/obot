@@ -293,6 +293,8 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"github.com/obot-platform/obot/apiclient/types.OAuthDebuggerTokenRequest":                 schema_obot_platform_obot_apiclient_types_OAuthDebuggerTokenRequest(ref),
 		"github.com/obot-platform/obot/apiclient/types.OAuthMetadata":                             schema_obot_platform_obot_apiclient_types_OAuthMetadata(ref),
 		"github.com/obot-platform/obot/apiclient/types.OAuthToken":                                schema_obot_platform_obot_apiclient_types_OAuthToken(ref),
+		"github.com/obot-platform/obot/apiclient/types.OpenAPIImportResponse":                     schema_obot_platform_obot_apiclient_types_OpenAPIImportResponse(ref),
+		"github.com/obot-platform/obot/apiclient/types.OpenAPIMetadata":                           schema_obot_platform_obot_apiclient_types_OpenAPIMetadata(ref),
 		"github.com/obot-platform/obot/apiclient/types.OpenAPIRuntimeConfig":                      schema_obot_platform_obot_apiclient_types_OpenAPIRuntimeConfig(ref),
 		"github.com/obot-platform/obot/apiclient/types.OpenAPISchema":                             schema_obot_platform_obot_apiclient_types_OpenAPISchema(ref),
 		"github.com/obot-platform/obot/apiclient/types.OpenAPISource":                             schema_obot_platform_obot_apiclient_types_OpenAPISource(ref),
@@ -15363,6 +15365,89 @@ func schema_obot_platform_obot_apiclient_types_OAuthToken(ref common.ReferenceCa
 					},
 				},
 				Required: []string{"access_token", "refresh_token", "expires_in", "token_type"},
+			},
+		},
+	}
+}
+
+func schema_obot_platform_obot_apiclient_types_OpenAPIImportResponse(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "OpenAPIImportResponse is a validated snapshot and suggested credential inputs. Importing does not create a catalog entry or store credentials.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"schema": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref("github.com/obot-platform/obot/apiclient/types.OpenAPISchema"),
+						},
+					},
+					"baseURL": {
+						SchemaProps: spec.SchemaProps{
+							Default: "",
+							Type:    []string{"string"},
+							Format:  "",
+						},
+					},
+					"suggestedHeaders": {
+						SchemaProps: spec.SchemaProps{
+							Type: []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Ref: ref("github.com/obot-platform/obot/apiclient/types.MCPConfig"),
+									},
+								},
+							},
+						},
+					},
+					"suggestedMetadata": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("github.com/obot-platform/obot/apiclient/types.OpenAPIMetadata"),
+						},
+					},
+				},
+				Required: []string{"schema", "baseURL", "suggestedHeaders", "suggestedMetadata"},
+			},
+		},
+		Dependencies: []string{
+			"github.com/obot-platform/obot/apiclient/types.MCPConfig", "github.com/obot-platform/obot/apiclient/types.OpenAPIMetadata", "github.com/obot-platform/obot/apiclient/types.OpenAPISchema"},
+	}
+}
+
+func schema_obot_platform_obot_apiclient_types_OpenAPIMetadata(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "OpenAPIMetadata contains editable catalog details suggested by a schema.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"name": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"description": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"shortDescription": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"icon": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+				},
 			},
 		},
 	}
