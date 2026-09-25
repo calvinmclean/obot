@@ -46,11 +46,6 @@ func TestCredentials(t *testing.T) {
 			prefix: "Bearer ",
 		},
 		{
-			name:    "oauth",
-			scheme:  map[string]any{"type": "oauth2", "flows": map[string]any{}},
-			invalid: true,
-		},
-		{
 			name:    "query key",
 			scheme:  map[string]any{"type": "apiKey", "in": "query", "name": "key"},
 			invalid: true,

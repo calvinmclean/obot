@@ -121,6 +121,8 @@ func documentLoadError(canonical []byte) error {
 // securityHeaders turns declared API-key and bearer schemes into editable Obot
 // header inputs. It deduplicates header names and suggests Obot's Bearer prefix;
 // it neither obtains credentials nor adds any values to the schema.
+// OAuth declarations are retained in the snapshot but do not produce inputs:
+// the hosted runtime does not perform OAuth flows.
 func securityHeaders(document *openapi3.T) ([]types.MCPConfig, error) {
 	var headers []types.MCPConfig
 	if document.Components == nil {
@@ -142,12 +144,14 @@ func securityHeaders(document *openapi3.T) ([]types.MCPConfig, error) {
 		scheme := ref.Value
 		var name, prefix string
 		switch {
+		case scheme.Type == "oauth2":
+			continue
 		case scheme.Type == "apiKey" && scheme.In == "header":
 			name = scheme.Name
 		case scheme.Type == "http" && strings.EqualFold(scheme.Scheme, "bearer"):
 			name, prefix = "Authorization", "Bearer "
 		default:
-			return nil, fmt.Errorf("only header API keys and pre-issued bearer credentials are supported; OAuth is not supported")
+			return nil, fmt.Errorf("only header API keys and pre-issued bearer credentials are supported; OAuth declarations are ignored")
 		}
 		if err := validateHeader(name); err != nil {
 			return nil, err
