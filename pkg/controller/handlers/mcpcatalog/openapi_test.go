@@ -150,7 +150,7 @@ func TestOpenAPICatalogSyncLifecycle(t *testing.T) {
 func TestOpenAPICatalogInlineSchema(t *testing.T) {
 	dir := t.TempDir()
 	writeOpenAPICatalog(t, dir, types.OpenAPISource{Content: catalogOpenAPISchema})
-	handler := New("", "", nil, nil, &mcp.SessionManager{})
+	handler := New("", "", nil, nil, &mcp.SessionManager{}, 0)
 	require.NotNil(t, handler.openAPIImporter)
 	entries, err := handler.readMCPCatalog(t.Context(), "default", dir, "")
 	require.NoError(t, err)
@@ -173,7 +173,7 @@ func TestOpenAPICatalogSchemaFetchIsIsolated(t *testing.T) {
 	require.Len(t, entries, 1)
 	require.Empty(t, authorization, "catalog credentials must not reach the schema host")
 
-	handler = New("", "", nil, nil, &mcp.SessionManager{})
+	handler = New("", "", nil, nil, &mcp.SessionManager{}, 0)
 	entries, err = handler.readMCPCatalog(t.Context(), "default", dir, "")
 	require.ErrorContains(t, err, "schema fetch failed")
 	require.Empty(t, entries, "the production importer blocks loopback destinations")

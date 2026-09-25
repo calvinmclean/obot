@@ -337,6 +337,7 @@ func TestOpenAPIKubernetesConnectionHeaders(t *testing.T) {
 			Name:      config.MCPServerName,
 			Namespace: "mcp",
 			Status: appsv1.DeploymentStatus{
+				Replicas:          1,
 				UpdatedReplicas:   1,
 				ReadyReplicas:     1,
 				AvailableReplicas: 1,
@@ -351,12 +352,13 @@ func TestOpenAPIKubernetesConnectionHeaders(t *testing.T) {
 		},
 	).Build()
 	backend := kubernetesBackend{
+		client:           client,
 		cachedClient:     client,
 		mcpNamespace:     "mcp",
 		mcpClusterDomain: "cluster.local",
 		deploymentCache: map[string]*kubernetesDeploymentCacheEntry{
 			config.MCPServerName: {
-				hash:    utils.Digest(config),
+				hash:    serverID(config) + utils.Digest(config.Files),
 				podName: "existing-pod",
 			},
 		},

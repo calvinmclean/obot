@@ -40,6 +40,11 @@ export interface OpenAPIImportResult {
 	suggestedMetadata: OpenAPIMetadata;
 }
 
+export interface OpenAPIImportDraft {
+	config: OpenAPIRuntimeConfig;
+	result: OpenAPIImportResult;
+}
+
 export async function importOpenAPI(
 	entity: 'catalog' | 'workspace',
 	id: string,

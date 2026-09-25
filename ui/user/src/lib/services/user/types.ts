@@ -1087,5 +1087,5 @@ export type Workspace = {
 	role: number;
 	type: string;
 };
-export type LaunchType = 'hosted' | 'remote';
+export type LaunchType = 'hosted' | 'remote' | 'openapi';
 export type LaunchServerType = LaunchType | 'multi';

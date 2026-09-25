@@ -21,8 +21,7 @@
 		return [
 			{ id: 'npx', label: 'NPX' },
 			{ id: 'uvx', label: 'UVX' },
-			{ id: 'containerized', label: 'Containerized' },
-			...(serverType === 'hosted' ? [{ id: 'openapi', label: 'OpenAPI' }] : [])
+			{ id: 'containerized', label: 'Containerized' }
 		];
 	});
 

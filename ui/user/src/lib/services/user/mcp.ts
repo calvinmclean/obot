@@ -471,6 +471,7 @@ export function isMultiUserServer(server?: MCPCatalogServer) {
 
 export function getServerTypeLabelByType(type?: string) {
 	if (!type) return '';
+	if (type === 'openapi') return 'OpenAPI';
 	return type === 'hosted'
 		? 'Hosted'
 		: type === 'multi'

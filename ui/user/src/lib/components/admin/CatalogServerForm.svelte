@@ -18,7 +18,11 @@
 		Group
 	} from '$lib/services';
 	import type { OpenAPIRuntimeConfig } from '$lib/services';
-	import type { OpenAPIImportResult, OpenAPIMetadata } from '$lib/services/openapi';
+	import type {
+		OpenAPIImportDraft,
+		OpenAPIImportResult,
+		OpenAPIMetadata
+	} from '$lib/services/openapi';
 	import { MAX_CATALOG_ENTRY_SHORT_DESCRIPTION_LENGTH } from '$lib/services/user/constants';
 	import { getManifestConfiguration } from '$lib/services/user/mcp';
 	import {
@@ -52,6 +56,7 @@
 		entity?: 'workspace' | 'catalog';
 		entry?: MCPCatalogEntry | MCPCatalogServer;
 		type?: LaunchServerType;
+		initialOpenAPIImport?: OpenAPIImportDraft;
 		readonly?: boolean;
 		onCancel?: () => void;
 		onSubmit?: (data: MCPCatalogEntry | MCPCatalogServer, message?: string) => void;
@@ -67,6 +72,7 @@
 		entry,
 		readonly,
 		type: newType = 'hosted',
+		initialOpenAPIImport,
 		onCancel,
 		onSubmit,
 		readonlyMessage,
@@ -80,7 +86,8 @@
 		} else {
 			// For catalog entries, determine type based on runtime
 			const catalogEntry = entry as MCPCatalogEntry;
-			return catalogEntry.manifest.runtime === 'remote' ? 'remote' : 'hosted';
+			const runtime = catalogEntry.manifest.runtime;
+			return runtime === 'remote' || runtime === 'openapi' ? runtime : 'hosted';
 		}
 	}
 
@@ -95,7 +102,7 @@
 	let secretBindingTargets = $state<MCPAllowedSecretBindingTarget[]>();
 
 	let formData = $state<RuntimeFormData>(untrack(() => convertToFormData(entry)));
-	let importedBaseURL = $state('');
+	let importedBaseURL = $state(untrack(() => initialOpenAPIImport?.result.baseURL ?? ''));
 
 	function completeOpenAPIImport(
 		config: OpenAPIRuntimeConfig,
@@ -198,7 +205,7 @@
 	function convertToFormData(item?: MCPCatalogEntry | MCPCatalogServer): RuntimeFormData {
 		if (!item) {
 			// Default initialization for new servers
-			const isHostedType = type === 'hosted';
+			const isHostedType = type === 'hosted' || type === 'openapi';
 			return {
 				categories: [''],
 				metadata: undefined,
@@ -208,15 +215,25 @@
 				env: [],
 				icon: '',
 				serverUserType: isHostedType && entity === 'catalog' ? 'multiUser' : 'singleUser',
-				runtime: 'npx' as Runtime,
-				config: type !== 'multi' ? [] : undefined,
+				runtime: type === 'openapi' ? 'openapi' : ('npx' as Runtime),
+				config:
+					type !== 'multi'
+						? structuredClone($state.snapshot(initialOpenAPIImport?.result.suggestedHeaders ?? []))
+						: undefined,
+				openAPIConfig:
+					type === 'openapi'
+						? structuredClone(
+								$state.snapshot(initialOpenAPIImport?.config ?? { source: { url: '' } })
+							)
+						: undefined,
 				resources: type !== 'remote' ? defaultResourceRuntimeConfig() : undefined,
 				npxConfig: defaultNpxConfig(),
 				uvxConfig: undefined,
 				containerizedConfig: undefined,
 				remoteConfig: undefined,
 				remoteServerConfig: undefined,
-				multiUserConfig: isHostedType ? { userDefinedHeaders: [] } : undefined
+				multiUserConfig: isHostedType ? { userDefinedHeaders: [] } : undefined,
+				...initialOpenAPIImport?.result.suggestedMetadata
 			};
 		}
 
@@ -651,6 +668,7 @@
 		try {
 			const handleFns = {
 				hosted: handleEntrySubmit,
+				openapi: handleEntrySubmit,
 				multi: handleServerSubmit,
 				remote: handleEntrySubmit
 			};
@@ -861,12 +879,14 @@
 	</section>
 
 	<!-- Runtime Selection -->
-	<RuntimeSelector
-		bind:runtime={formData.runtime}
-		serverType={type}
-		{readonly}
-		onRuntimeChange={handleRuntimeChange}
-	/>
+	{#if type !== 'openapi'}
+		<RuntimeSelector
+			bind:runtime={formData.runtime}
+			serverType={type}
+			{readonly}
+			onRuntimeChange={handleRuntimeChange}
+		/>
+	{/if}
 
 	<!-- Runtime-specific Forms -->
 	<div class="flex flex-col gap-8" id={`${CATALOG_SERVER_FIELD_IDS.runtimeConfiguration}`}>
