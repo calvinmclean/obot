@@ -33,5 +33,10 @@ func TestOAuthDoesNotBlockHeaderSuggestions(t *testing.T) {
 		}
 		_, err = SettingsJSON(types.OpenAPIRuntimeConfig{}, result, result.SuggestedHeaders)
 		require.NoError(t, err)
+		if mixed {
+			settings, err := SettingsJSON(types.OpenAPIRuntimeConfig{}, result, result.SuggestedHeaders[1:])
+			require.NoError(t, err, "users may keep only the bearer header")
+			require.Contains(t, string(settings), `"credentialHeaders":["Authorization"]`)
+		}
 	}
 }

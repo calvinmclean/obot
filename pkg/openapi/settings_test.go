@@ -77,8 +77,9 @@ func TestCredentials(t *testing.T) {
 			require.Equal(t, test.prefix, header.Prefix)
 			require.True(t, header.Sensitive)
 			require.True(t, header.Required)
-			_, err = SettingsJSON(types.OpenAPIRuntimeConfig{}, result, nil)
-			require.ErrorContains(t, err, "every security scheme")
+			settingsWithoutHeaders, err := SettingsJSON(types.OpenAPIRuntimeConfig{}, result, nil)
+			require.NoError(t, err, "suggested headers may be removed")
+			require.JSONEq(t, `{"baseURL":"https://api.example.com/v1/","credentialHeaders":[],"toolSearch":false}`, string(settingsWithoutHeaders))
 			header.Value = "must-not-be-serialized"
 			settings, err := SettingsJSON(types.OpenAPIRuntimeConfig{}, result, []types.MCPConfig{header})
 			require.NoError(t, err)
