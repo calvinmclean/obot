@@ -12,8 +12,10 @@
 		readonly?: boolean;
 		importOnly?: boolean;
 		importedBaseURL?: string;
+		showBaseURLError?: boolean;
 		onImported?: (result: OpenAPIImportResult) => void;
 		onReplace?: () => void;
+		onBaseURLChange?: () => void;
 	}
 	let {
 		config = $bindable(),
@@ -22,8 +24,10 @@
 		readonly = false,
 		importOnly = false,
 		importedBaseURL = '',
+		showBaseURLError = false,
 		onImported,
-		onReplace
+		onReplace,
+		onBaseURLChange
 	}: Props = $props();
 	let sourceType = $state(untrack(() => (config.source.content !== undefined ? 'file' : 'url')));
 	let busy = $state(false);
@@ -32,6 +36,9 @@
 	let fileName = $state('');
 	let fileInput = $state<HTMLInputElement>();
 	let disposed = false;
+	let baseURLRequired = $derived(Boolean(config.schema) && !openAPIBaseURL(config.schema));
+	let baseURLMissing = $derived(baseURLRequired && !config.baseURL?.trim());
+	let baseURLInvalid = $derived(baseURLMissing && showBaseURLError);
 	onDestroy(() => {
 		disposed = true;
 	});
@@ -172,23 +179,48 @@
 		{#if config.schema}
 			<div class="border-base-300 mt-2 flex flex-col gap-2 border-t pt-4">
 				<div class="flex items-center gap-2">
-					<label for="openapi-base-url" class="text-sm font-medium">API request base URL</label>
-					<span class="text-muted-content bg-base-200 rounded px-2 py-0.5 text-xs">Optional</span>
+					<label for="openapi-base-url" class="text-sm font-medium">
+						API request base URL
+						{#if baseURLRequired}
+							<span class:text-error={baseURLInvalid} aria-hidden="true">*</span>
+						{/if}
+					</label>
+					<span class="text-muted-content bg-base-200 rounded px-2 py-0.5 text-xs"
+						>{baseURLRequired ? 'Required' : 'Optional'}</span
+					>
 				</div>
 				<p id="openapi-base-url-hint" class="text-muted-content text-xs">
-					Where tool calls are sent. Leave blank to use the API server URL defined in the schema.
+					Where tool calls are sent.
+					{#if !baseURLRequired}Leave blank to use the API server URL defined in the schema.{/if}
 				</p>
 				<input
 					id="openapi-base-url"
 					class="text-input-filled"
+					class:error={baseURLInvalid}
 					type="url"
 					bind:value={config.baseURL}
+					oninput={onBaseURLChange}
+					required={baseURLRequired}
+					aria-invalid={baseURLInvalid ? 'true' : undefined}
 					placeholder={importedBaseURL ||
 						openAPIBaseURL(config.schema) ||
 						resolvedBaseURL ||
 						'https://api.example.com/v1'}
-					aria-describedby="openapi-base-url-hint"
+					aria-describedby={baseURLMissing
+						? 'openapi-base-url-hint openapi-base-url-error'
+						: 'openapi-base-url-hint'}
 				/>
+				{#if baseURLMissing}
+					<p
+						id="openapi-base-url-error"
+						class="text-xs"
+						class:text-error={baseURLInvalid}
+						class:text-muted-content={!baseURLInvalid}
+					>
+						This schema has no usable absolute server URL. Enter an API request base URL before
+						saving.
+					</p>
+				{/if}
 			</div>
 		{/if}
 		{#if importOnly && !readonly}

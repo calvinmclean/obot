@@ -99,6 +99,9 @@ func SettingsJSON(config types.OpenAPIRuntimeConfig, result *Result, headers []t
 			return nil, fmt.Errorf("configure every security scheme's credential header")
 		}
 	}
+	if result.BaseURL == "" {
+		return nil, fmt.Errorf("no usable server URL; configure baseURL")
+	}
 	base, err := destination(result.BaseURL)
 	if err != nil {
 		return nil, err
