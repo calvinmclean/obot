@@ -11,6 +11,8 @@
 		config: OpenAPIRuntimeConfig;
 		readonly?: boolean;
 		importedBaseURL?: string;
+		showBaseURLError?: boolean;
+		onBaseURLChange?: () => void;
 		current: OpenAPIMetadata;
 		onComplete: (
 			config: OpenAPIRuntimeConfig,
@@ -25,7 +27,9 @@
 		current,
 		onComplete,
 		readonly = false,
-		importedBaseURL = ''
+		importedBaseURL = '',
+		showBaseURLError = false,
+		onBaseURLChange
 	}: Props = $props();
 	let editing = $state(untrack(() => !config.schema));
 	let draft = $state<OpenAPIRuntimeConfig>(untrack(() => structuredClone($state.snapshot(config))));
@@ -66,7 +70,15 @@
 </script>
 
 {#if editing && !readonly}
-	<OpenAPIRuntimeForm bind:config={draft} {id} {entity} importOnly onImported={imported} />
+	<OpenAPIRuntimeForm
+		bind:config={draft}
+		{id}
+		{entity}
+		importOnly
+		onImported={imported}
+		{onBaseURLChange}
+		{showBaseURLError}
+	/>
 	{#if config.schema}
 		<button
 			type="button"
@@ -83,6 +95,8 @@
 		{entity}
 		{readonly}
 		{importedBaseURL}
+		{showBaseURLError}
+		{onBaseURLChange}
 		onReplace={() => {
 			draft = structuredClone($state.snapshot(config));
 			editing = true;

@@ -914,6 +914,8 @@
 					icon: formData.icon
 				}}
 				onComplete={completeOpenAPIImport}
+				onBaseURLChange={() => updateRequired('openAPIBaseURL')}
+				showBaseURLError={showRequired.openAPIBaseURL}
 			/>
 		{:else if formData.runtime === 'remote' && type === 'multi' && formData.remoteServerConfig}
 			<RemoteRuntimeForm

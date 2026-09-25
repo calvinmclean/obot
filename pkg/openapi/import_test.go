@@ -199,11 +199,6 @@ func TestUnsupportedDocuments(t *testing.T) {
 			message: "dynamic",
 		},
 		{
-			name:    "relative servers only",
-			change:  func(d map[string]any) { d["servers"] = []any{map[string]any{"url": "/v1"}} },
-			message: "configure baseURL",
-		},
-		{
 			name:    "webhooks",
 			change:  func(d map[string]any) { d["webhooks"] = map[string]any{"hook": map[string]any{}} },
 			message: "webhooks",

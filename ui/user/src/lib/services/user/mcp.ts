@@ -24,6 +24,7 @@ import {
 	type ToolOverride,
 	type VMCPComponentCatalogEntrySnapshot
 } from '..';
+import { openAPIBaseURL } from '../openapi';
 import { AiClient, MAX_CATALOG_ENTRY_SHORT_DESCRIPTION_LENGTH } from './constants';
 
 export interface MCPServerInfo extends MCPServer {
@@ -666,6 +667,13 @@ export const validateRuntimeForm = (
 	switch (formData.runtime) {
 		case 'openapi':
 			if (!formData.openAPIConfig?.schema) missingFields.schema = true;
+			if (
+				formData.openAPIConfig?.schema &&
+				!formData.openAPIConfig.baseURL?.trim() &&
+				!openAPIBaseURL(formData.openAPIConfig.schema)
+			) {
+				missingFields.openAPIBaseURL = true;
+			}
 			if (formData.openAPIConfig?.exclude?.length && !formData.openAPIConfig.toolSearch) {
 				invalid.exclude = true;
 			}

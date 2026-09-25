@@ -1,8 +1,11 @@
 package openapi
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
+	"reflect"
 	"regexp"
 	"sort"
 	"strconv"
@@ -32,8 +35,7 @@ func inspect(raw map[string]any, canonical []byte, config types.OpenAPIRuntimeCo
 	loader.IsExternalRefsAllowed = false
 	document, err := loader.LoadFromData(canonical)
 	if err != nil {
-		// Loader errors may quote schema content. Do not expose embedded secrets.
-		return nil, fmt.Errorf("cannot parse OpenAPI document or resolve local references")
+		return nil, documentLoadError(canonical)
 	}
 	if !versionPattern.MatchString(document.OpenAPI) {
 		return nil, fmt.Errorf("supported OpenAPI versions for the hosted wrapper are 3.0.0–3.0.4 and 3.1.0–3.1.2")
@@ -60,16 +62,15 @@ func inspect(raw map[string]any, canonical []byte, config types.OpenAPIRuntimeCo
 				break
 			}
 		}
-		if result.BaseURL == "" {
-			return nil, fmt.Errorf("no usable server URL; configure baseURL")
-		}
+		// Import can precede configuration. A missing destination is checked
+		// when saving/deploying, after the user can supply a base URL override.
 	}
 	headers, err := securityHeaders(document)
 	if err != nil {
 		return nil, err
 	}
 	result.SuggestedHeaders = headers
-	if len(headers) > 0 && !strings.HasPrefix(result.BaseURL, "https://") {
+	if len(headers) > 0 && result.BaseURL != "" && !strings.HasPrefix(result.BaseURL, "https://") {
 		return nil, fmt.Errorf("credential forwarding requires an HTTPS API destination")
 	}
 	if document.Paths == nil {
@@ -98,6 +99,23 @@ func inspect(raw map[string]any, canonical []byte, config types.OpenAPIRuntimeCo
 		}
 	}
 	return result, nil
+}
+
+// documentLoadError recovers structured JSON type errors that the loader flattens
+// into text when trying both JSON and YAML. Only type names are exposed: loader
+// messages, field names, and invalid values may contain caller-supplied secrets.
+func documentLoadError(canonical []byte) error {
+	var document openapi3.T
+	var mismatch *json.UnmarshalTypeError
+	if errors.As(json.Unmarshal(canonical, &document), &mismatch) && mismatch.Type != nil {
+		switch mismatch.Value {
+		case "array", "object", "bool", "string":
+			if mismatch.Type.Kind() == reflect.Struct {
+				return fmt.Errorf("invalid OpenAPI document: expected object for %s, got %s", strings.TrimSuffix(mismatch.Type.Name(), "Bis"), mismatch.Value)
+			}
+		}
+	}
+	return fmt.Errorf("cannot parse OpenAPI document or resolve local references")
 }
 
 // securityHeaders turns declared API-key and bearer schemes into editable Obot
