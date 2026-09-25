@@ -30,10 +30,21 @@ beforeEach(() => {
 	);
 });
 
-async function openForm(entity: 'catalog' | 'workspace' = 'catalog') {
-	await render(CatalogServerForm, { id: 'test', entity, type: 'hosted' });
+it('does not offer OpenAPI as a hosted runtime', async () => {
+	await render(CatalogServerForm, { id: 'test', type: 'hosted' });
 	await page.getByCSS('#runtime-selector').click();
-	await page.getByRole('button', { name: 'OpenAPI', exact: true }).click();
+	await expect.element(page.getByRole('button', { name: 'NPX', exact: true })).toBeVisible();
+	await expect.element(page.getByRole('button', { name: 'UVX', exact: true })).toBeVisible();
+	await expect
+		.element(page.getByRole('button', { name: 'Containerized', exact: true }))
+		.toBeVisible();
+	await expect
+		.element(page.getByRole('button', { name: 'OpenAPI', exact: true }))
+		.not.toBeInTheDocument();
+});
+
+async function openForm(entity: 'catalog' | 'workspace' = 'catalog') {
+	return await render(CatalogServerForm, { id: 'test', entity, type: 'openapi' });
 }
 
 function mockImport(collection = 'mcp-catalogs') {
@@ -65,7 +76,9 @@ it('imports before saving and keeps the snapshot, header prefix, and exclusion s
 	await expect.element(page.getByRole('button', { name: 'Save', exact: true })).toBeVisible();
 	await page.getByLabelText('Schema URL', { exact: true }).fill(sourceURL);
 	await page.getByRole('button', { name: 'Import schema', exact: true }).click();
-	await expect.element(page.getByRole('status')).toHaveTextContent('Schema imported');
+	await expect
+		.element(page.getByRole('status'))
+		.toHaveTextContent('Schema imported. The snapshot will be saved with this entry.');
 	expect(imported).toHaveBeenCalledWith({ source: { url: sourceURL } });
 	await expect.element(page.getByLabelText('Value Prefix')).toHaveValue('Bearer ');
 	await page.getByLabelText('Enable Tool Search').click();
@@ -73,7 +86,9 @@ it('imports before saving and keeps the snapshot, header prefix, and exclusion s
 	await page.getByLabelText('Method', { exact: true }).selectOptions('POST');
 	await page.getByLabelText('Path pattern (regex)').fill('^/users$');
 	await page.getByLabelText('Tag', { exact: true }).fill('internal');
-	await page.getByLabelText('API request base URL').fill('https://override.example.com');
+	await page
+		.getByLabelText('API request base URL', { exact: false })
+		.fill('https://override.example.com');
 	await page.getByCSS(`#${CATALOG_SERVER_FIELD_IDS.name}`).fill('Example API');
 	await page.getByCSS(`#${CATALOG_SERVER_FIELD_IDS.shortDescription}`).fill('An example API');
 	await page.getByRole('button', { name: 'Save', exact: true }).click();
@@ -126,7 +141,9 @@ it('prefills new entry metadata and displays the schema base URL only as a place
 	);
 	await openForm();
 	await expect.element(page.getByRole('dialog')).not.toBeInTheDocument();
-	await expect.element(page.getByLabelText('API request base URL')).not.toBeInTheDocument();
+	await expect
+		.element(page.getByLabelText('API request base URL', { exact: false }))
+		.not.toBeInTheDocument();
 	await expect
 		.element(page.getByText('Where tool calls are sent.', { exact: false }))
 		.not.toBeInTheDocument();
@@ -142,9 +159,11 @@ it('prefills new entry metadata and displays the schema base URL only as a place
 	await expect
 		.element(page.getByCSS(`#${CATALOG_SERVER_FIELD_IDS.icon}`))
 		.toHaveValue('https://example.com/logo.svg');
-	await expect.element(page.getByLabelText('API request base URL')).toHaveValue('');
 	await expect
-		.element(page.getByLabelText('API request base URL'))
+		.element(page.getByLabelText('API request base URL', { exact: false }))
+		.toHaveValue('');
+	await expect
+		.element(page.getByLabelText('API request base URL', { exact: false }))
 		.toHaveAttribute('placeholder', 'https://example.com/api');
 	await page.getByRole('button', { name: 'Save', exact: true }).click();
 	await vi.waitFor(() => expect(saved).toHaveBeenCalled());
@@ -155,13 +174,10 @@ it('prefills new entry metadata and displays the schema base URL only as a place
 	expect(saved.mock.calls[0][0].openAPIConfig.baseURL).toBeUndefined();
 });
 
-it('keeps existing details visible when OpenAPI is selected and confirms suggestions after import', async () => {
+it('keeps entered details visible and confirms suggestions after inline import', async () => {
 	mockImport();
-	await render(CatalogServerForm, { id: 'test', entity: 'catalog', type: 'hosted' });
+	await openForm();
 	await page.getByCSS(`#${CATALOG_SERVER_FIELD_IDS.name}`).fill('My server');
-	await page.getByCSS('#npx-package').fill('my-package');
-	await page.getByCSS('#runtime-selector').click();
-	await page.getByRole('button', { name: 'OpenAPI', exact: true }).click();
 	await expect.element(page.getByRole('dialog')).not.toBeInTheDocument();
 	await expect.element(page.getByCSS(`#${CATALOG_SERVER_FIELD_IDS.name}`)).toHaveValue('My server');
 	await page.getByLabelText('Schema URL', { exact: true }).fill(sourceURL);
@@ -224,7 +240,7 @@ it('only replaces selected metadata fields after importing a replacement', async
 		.element(page.getByCSS(`#${CATALOG_SERVER_FIELD_IDS.shortDescription}`))
 		.toHaveValue('New summary');
 	await expect
-		.element(page.getByLabelText('API request base URL'))
+		.element(page.getByLabelText('API request base URL', { exact: false }))
 		.toHaveValue('https://override.example.com');
 	expect(entry.manifest.openAPIConfig?.schema).toEqual(schema);
 });
@@ -248,7 +264,7 @@ it('requires a base URL inline after importing a schema with only a relative ser
 	await openForm();
 	await page.getByLabelText('Schema URL', { exact: true }).fill(sourceURL);
 	await page.getByRole('button', { name: 'Import schema', exact: true }).click();
-	const baseURL = page.getByLabelText('API request base URL');
+	const baseURL = page.getByLabelText('API request base URL', { exact: false });
 	await expect.element(baseURL).toBeRequired();
 	await expect.element(baseURL).not.toHaveAttribute('aria-invalid', 'true');
 	await expect.element(baseURL).not.toHaveClass('error');
@@ -321,13 +337,17 @@ it('uses the workspace import endpoint and stages source changes without losing 
 	await openForm('workspace');
 	await page.getByLabelText('Schema URL', { exact: true }).fill(sourceURL);
 	await page.getByRole('button', { name: 'Import schema', exact: true }).click();
-	await expect.element(page.getByRole('status')).toHaveTextContent('Schema imported');
+	await expect
+		.element(page.getByRole('status'))
+		.toHaveTextContent('Schema imported. The snapshot will be saved with this entry.');
 	expect(imported).toHaveBeenCalledOnce();
 	await page.getByRole('button', { name: 'Replace schema', exact: true }).click();
 	await page.getByLabelText('Schema URL', { exact: true }).fill('https://example.com/new.json');
 	await page.getByRole('button', { name: 'Cancel import', exact: true }).click();
 	await expect.element(page.getByText(sourceURL, { exact: true })).toBeVisible();
-	await expect.element(page.getByRole('status')).toHaveTextContent('Schema imported');
+	await expect
+		.element(page.getByRole('status'))
+		.toHaveTextContent('Schema imported. The snapshot will be saved with this entry.');
 });
 
 it('shows import errors and allows retry without creating an entry', async () => {
@@ -342,11 +362,15 @@ it('shows import errors and allows retry without creating an entry', async () =>
 	await page.getByRole('button', { name: 'Import schema', exact: true }).click();
 	await expect
 		.element(page.getByRole('alert'))
-		.toHaveTextContent('schema must be a JSON or YAML document');
+		.toHaveTextContent(
+			'400 /mcp-catalogs/test/openapi/import: schema must be a JSON or YAML document'
+		);
 	await expect.element(page.getByRole('button', { name: 'Save', exact: true })).toBeVisible();
 	mockImport();
 	await page.getByRole('button', { name: 'Import schema', exact: true }).click();
-	await expect.element(page.getByRole('status')).toHaveTextContent('Schema imported');
+	await expect
+		.element(page.getByRole('status'))
+		.toHaveTextContent('Schema imported. The snapshot will be saved with this entry.');
 });
 
 it('preserves an existing snapshot without importing and removes exclusions when search is disabled', async () => {
@@ -365,7 +389,9 @@ it('preserves an existing snapshot without importing and removes exclusions when
 		}
 	} as MCPCatalogEntry;
 	await render(CatalogServerForm, { id: 'test', entity: 'catalog', entry });
-	await expect.element(page.getByRole('status')).toHaveTextContent('Schema imported');
+	await expect
+		.element(page.getByRole('status'))
+		.toHaveTextContent('Schema imported. The snapshot will be saved with this entry.');
 	await expect.element(page.getByLabelText('Method', { exact: true })).toHaveValue('DELETE');
 	await page.getByLabelText('Enable Tool Search').click();
 	await expect.element(page.getByRole('button', { name: 'Add exclusion' })).not.toBeInTheDocument();
@@ -404,7 +430,9 @@ it.each([
 			.element(page.getByRole('button', { name: 'Replace file', exact: true }))
 			.toBeVisible();
 		await page.getByRole('button', { name: 'Import schema', exact: true }).click();
-		await expect.element(page.getByRole('status')).toHaveTextContent('Schema imported');
+		await expect
+			.element(page.getByRole('status'))
+			.toHaveTextContent('Schema imported. The snapshot will be saved with this entry.');
 		expect(imported).toHaveBeenCalledWith({ source: { content } });
 		await expect.element(page.getByLabelText('Value Prefix')).not.toBeInTheDocument();
 	}
@@ -424,7 +452,9 @@ it('shows an existing uploaded schema without asking users to select it again', 
 		} as MCPCatalogEntry
 	});
 	await expect.element(page.getByText('Uploaded schema', { exact: true })).toBeVisible();
-	await expect.element(page.getByRole('status')).toHaveTextContent('Schema imported');
+	await expect
+		.element(page.getByRole('status'))
+		.toHaveTextContent('Schema imported. The snapshot will be saved with this entry.');
 	await page.getByRole('button', { name: 'Replace schema', exact: true }).click();
 	await expect.element(page.getByText('Saved schema', { exact: true })).toBeVisible();
 	await expect
@@ -477,7 +507,9 @@ it('rejects oversized files before import', async () => {
 	await page
 		.getByLabelText('Schema file', { exact: true })
 		.upload(new File([new Uint8Array(1024 * 1024 + 1)], 'large.json'));
-	await expect.element(page.getByRole('alert')).toHaveTextContent('no larger than 1 MiB');
+	await expect
+		.element(page.getByRole('alert'))
+		.toHaveTextContent('Schema files must be no larger than 1 MiB.');
 	await expect
 		.element(page.getByRole('button', { name: 'Import schema', exact: true }))
 		.toBeDisabled();
@@ -520,7 +552,9 @@ it('keeps edited header flags and prefixes and avoids duplicates on another impo
 	await openForm();
 	await page.getByLabelText('Schema URL', { exact: true }).fill(sourceURL);
 	await page.getByRole('button', { name: 'Import schema', exact: true }).click();
-	await expect.element(page.getByRole('status')).toHaveTextContent('Schema imported');
+	await expect
+		.element(page.getByRole('status'))
+		.toHaveTextContent('Schema imported. The snapshot will be saved with this entry.');
 	await page.getByLabelText('Value Prefix').fill('Token ');
 	const required = page.getByRole('switch', { name: 'Required', exact: true });
 	const sensitive = page.getByRole('switch', { name: 'Sensitive', exact: true });
@@ -532,13 +566,15 @@ it('keeps edited header flags and prefixes and avoids duplicates on another impo
 	await page.getByRole('button', { name: 'Import schema', exact: true }).click();
 	await vi.waitFor(() => expect(imported).toHaveBeenCalledTimes(2));
 	await page.getByRole('button', { name: 'Keep current values', exact: true }).click();
-	await expect.element(page.getByRole('status')).toHaveTextContent('Schema imported');
+	await expect
+		.element(page.getByRole('status'))
+		.toHaveTextContent('Schema imported. The snapshot will be saved with this entry.');
 	await expect.element(page.getByLabelText('Value Prefix')).toHaveValue('Token ');
 	await expect.element(required).not.toBeChecked();
 	await expect.element(sensitive).not.toBeChecked();
 });
 
-it('locks source edits during import and ignores the result after switching runtime', async () => {
+it('locks source edits during import and ignores the result after leaving the form', async () => {
 	let finishImport!: () => void;
 	const responseReady = new Promise<void>((resolve) => {
 		finishImport = resolve;
@@ -554,14 +590,13 @@ it('locks source edits during import and ignores the result after switching runt
 			});
 		})
 	);
-	await openForm();
+	const form = await openForm();
 	await page.getByLabelText('Schema URL', { exact: true }).fill(sourceURL);
 	await page.getByRole('button', { name: 'Import schema', exact: true }).click();
 	await expect.element(page.getByLabelText('Schema URL', { exact: true })).toBeDisabled();
 	await expect.element(page.getByRole('button', { name: 'Save', exact: true })).toBeVisible();
-	await page.getByCSS('#runtime-selector').click();
-	await page.getByRole('button', { name: 'NPX', exact: true }).click();
+	await form.unmount();
 	finishImport();
-	await expect.element(page.getByCSS('#npx-package')).toBeVisible();
+	await expect.element(page.getByRole('status')).not.toBeInTheDocument();
 	await expect.element(page.getByLabelText('Value Prefix')).not.toBeInTheDocument();
 });
