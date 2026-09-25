@@ -57,11 +57,10 @@ func TestOpenAPIManifestValidation(t *testing.T) {
 			want: "header inputs",
 		},
 		{
-			name: "missing declared security header",
+			name: "suggested security header may be omitted",
 			mutate: func(m *types.MCPServerCatalogEntryManifest) {
 				m.OpenAPIConfig.Schema = json.RawMessage(`{"openapi":"3.1.0","info":{"title":"Test","version":"1"},"servers":[{"url":"https://api.example.com"}],"paths":{},"components":{"securitySchemes":{"key":{"type":"apiKey","in":"header","name":"X-API-Key"}}},"security":[{"key":[]}]}`)
 			},
-			want: "configure every security scheme",
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {

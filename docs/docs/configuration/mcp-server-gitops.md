@@ -505,7 +505,7 @@ config:
     prefix: "Bearer "
 ```
 
-Instead of `source.url`, use `source.content: |` with an inline JSON or YAML schema. Set exactly one source. Omit `config` for APIs without authentication. Configure every credential header declared by the schema; GitOps does not automatically add suggested headers. Supply credentials through Obot, not in the catalog file. OAuth is not supported yet.
+Instead of `source.url`, use `source.content: |` with an inline JSON or YAML schema. Set exactly one source. Omit `config` for APIs without authentication. Configure the credential headers you want to forward; schema-declared headers are suggestions, and GitOps does not automatically add them. Supply credentials through Obot, not in the catalog file. OAuth flows are not supported; OAuth declarations do not prevent importing a schema.
 
 `toolSearch` defaults to false. Exclusions require Tool Search. Fields in one exclusion must all match; separate exclusions are alternatives. Path patterns are regular expressions, and tags match exactly.
 

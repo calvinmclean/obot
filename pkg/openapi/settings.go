@@ -94,11 +94,6 @@ func SettingsJSON(config types.OpenAPIRuntimeConfig, result *Result, headers []t
 		seen[key] = true
 		names = append(names, header.Key)
 	}
-	for _, suggested := range result.SuggestedHeaders {
-		if !seen[strings.ToLower(suggested.Key)] {
-			return nil, fmt.Errorf("configure every security scheme's credential header")
-		}
-	}
 	if result.BaseURL == "" {
 		return nil, fmt.Errorf("no usable server URL; configure baseURL")
 	}

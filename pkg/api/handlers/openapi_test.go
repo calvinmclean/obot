@@ -274,13 +274,6 @@ func TestOpenAPICatalogRejectsInvalidConfiguration(t *testing.T) {
 			want: "header inputs",
 		},
 		{
-			name: "missing suggested header",
-			mutate: func(m *types.MCPServerCatalogEntryManifest) {
-				m.OpenAPIConfig.Source.Content = strings.Replace(apiOpenAPISchema, `"paths":{}`, `"paths":{},"components":{"securitySchemes":{"key":{"type":"apiKey","in":"header","name":"X-API-Key"}}},"security":[{"key":[]}]`, 1)
-			},
-			want: "configure every security scheme",
-		},
-		{
 			name: "snapshot does not waive source validation",
 			mutate: func(m *types.MCPServerCatalogEntryManifest) {
 				m.OpenAPIConfig.Source = types.OpenAPISource{URL: "file:///etc/passwd"}
@@ -306,6 +299,30 @@ func TestOpenAPICatalogRejectsInvalidConfiguration(t *testing.T) {
 			require.Empty(t, entries.Items)
 		})
 	}
+}
+
+func TestOpenAPICatalogAllowsRemovingSuggestedHeader(t *testing.T) {
+	storage := newFakeStorage(t, &v1.MCPCatalog{Name: "scope", Namespace: system.DefaultNamespace})
+	manifest := types.MCPServerCatalogEntryManifest{
+		Name:    "Example",
+		Runtime: types.RuntimeOpenAPI,
+		Config:  []types.MCPConfig{{Key: "X-API-Key", Usage: types.Header}},
+		OpenAPIConfig: &types.OpenAPIRuntimeConfig{
+			Source: types.OpenAPISource{Content: strings.Replace(apiOpenAPISchema, `"paths":{}`, `"paths":{},"components":{"securitySchemes":{"key":{"type":"apiKey","in":"header","name":"X-API-Key"}}},"security":[{"key":[]}]`, 1)},
+		},
+	}
+	handler := newOpenAPIHandler()
+	ctx, _ := openAPIRequest(t, storage, "catalog_id", http.MethodPost, manifest)
+	require.NoError(t, handler.CreateEntry(ctx))
+	var entries v1.MCPServerCatalogEntryList
+	require.NoError(t, storage.List(t.Context(), &entries))
+	require.Len(t, entries.Items, 1)
+	manifest.Config = nil
+	ctx, _ = openAPIRequest(t, storage, "catalog_id", http.MethodPut, manifest)
+	ctx.Request.SetPathValue("entry_id", entries.Items[0].Name)
+	require.NoError(t, handler.UpdateEntry(ctx))
+	require.NoError(t, storage.List(t.Context(), &entries))
+	require.Empty(t, entries.Items[0].Spec.Manifest.Config)
 }
 
 func TestOpenAPIUpdateRespectsOwnership(t *testing.T) {
