@@ -17,6 +17,7 @@
 		type OrgUser,
 		type MCPCatalogEntryServerManifest
 	} from '$lib/services';
+	import type { OpenAPIImportDraft } from '$lib/services/openapi';
 	import {
 		getMCPDisplayName,
 		getManifestConfiguration,
@@ -70,6 +71,7 @@
 		entry?: MCPCatalogEntry | MCPCatalogServer;
 		server?: MCPCatalogServer;
 		type?: LaunchServerType;
+		initialOpenAPIImport?: OpenAPIImportDraft;
 		readonly?: boolean;
 		disableAddFromTools?: boolean;
 		onAddFromTools?: () => void;
@@ -91,6 +93,7 @@
 		id,
 		entity = 'catalog',
 		type,
+		initialOpenAPIImport,
 		readonly,
 		disableAddFromTools,
 		onAddFromTools,
@@ -873,6 +876,7 @@
 		<CatalogServerForm
 			{entry}
 			{type}
+			{initialOpenAPIImport}
 			readonly={configurationReadonly}
 			{id}
 			{entity}
