@@ -9,6 +9,7 @@
 	interface Props {
 		config?: MCPConfig[];
 		readonly?: boolean;
+		headersOnly?: boolean;
 		secretBindingTargets?: MCPAllowedSecretBindingTarget[];
 		showRequired?: boolean;
 		showInvalid?: boolean;
@@ -17,6 +18,7 @@
 	let {
 		config = $bindable(),
 		readonly,
+		headersOnly = false,
 		secretBindingTargets,
 		showRequired,
 		showInvalid
@@ -39,8 +41,14 @@
 		<div class="flex flex-col gap-1">
 			<h4 class="text-sm font-semibold">Configuration</h4>
 			<p class="text-muted-content text-xs font-light">
-				Configuration values can be supplied statically, by users, or selected from options.
-				Interpolated values are available to templates but are not added to the server environment.
+				{#if headersOnly}
+					Headers are forwarded to the API with each request. Imported suggestions can be edited.
+					Use Value Prefix for values such as "Bearer " (including the trailing space).
+				{:else}
+					Configuration values can be supplied statically, by users, or selected from options.
+					Interpolated values are available to templates but are not added to the server
+					environment.
+				{/if}
 			</p>
 		</div>
 
@@ -55,7 +63,9 @@
 							id={`catalog-config-usage-${i}`}
 							class="dark:border-base-400 bg-base-100 border border-transparent"
 							classes={{ root: 'flex grow' }}
-							options={usageOptions}
+							options={headersOnly
+								? usageOptions.filter((option) => option.id === 'header')
+								: usageOptions}
 							selected={item.usage}
 							disabled={readonly}
 							onSelect={(option) => {
@@ -112,13 +122,13 @@
 					onclick={() => {
 						config ??= [];
 						config.push({
-							usage: 'env',
+							usage: headersOnly ? 'header' : 'env',
 							key: '',
 							description: '',
 							name: '',
 							value: '',
-							required: false,
-							sensitive: false
+							required: headersOnly,
+							sensitive: headersOnly
 						});
 					}}
 				>
