@@ -1,33 +1,30 @@
 package openapi
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
-	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/obot-platform/obot/apiclient/types"
 )
 
 const maxCredentialHeadersBytes = 96 * 1024
 
 // SnapshotEnvironment constructs deployment settings from the saved snapshot,
-// never Source. The OpenAPI loader reads the top-level servers; import-time
-// operation validation and header suggestions are not repeated here.
+// never Source. Revalidate the snapshot before launching the wrapper because
+// callers can supply a snapshot directly instead of using Importer.
 func SnapshotEnvironment(config types.OpenAPIRuntimeConfig, headers []types.MCPConfig) ([]string, error) {
 	if config.Schema == nil || len(config.Schema.Raw) == 0 || len(config.Schema.Raw) > MaxSchemaBytes {
 		return nil, fmt.Errorf("a stored OpenAPI schema of at most 1 MiB is required")
 	}
-	loader := openapi3.NewLoader()
-	loader.IsExternalRefsAllowed = false
-	document, err := loader.LoadFromData(config.Schema.Raw)
-	if err != nil || document == nil {
-		return nil, fmt.Errorf("cannot parse stored OpenAPI schema")
+	if !json.Valid(config.Schema.Raw) {
+		return nil, fmt.Errorf("stored OpenAPI schema must be JSON")
 	}
-	base, err := findBaseURL(config.BaseURL, document.Servers)
+	result, err := Parse(config.Schema.Raw, config)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("invalid stored OpenAPI schema: %w", err)
 	}
-	return Environment(&Result{BaseURL: base}, headers)
+	return Environment(result, headers)
 }
 
 // Environment validates credential definitions and returns the wrapper's
@@ -52,6 +49,11 @@ func Environment(result *Result, headers []types.MCPConfig) ([]string, error) {
 		}
 		seen[key] = true
 		names = append(names, header.Key)
+	}
+	for _, required := range result.SuggestedHeaders {
+		if !seen[strings.ToLower(required.Key)] {
+			return nil, fmt.Errorf("credential header %s declared by the schema is missing", required.Key)
+		}
 	}
 	base, err := destination(result.BaseURL)
 	if err != nil {

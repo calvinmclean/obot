@@ -304,6 +304,8 @@ func configurationHasDrifted(serverManifest types.MCPServerManifest, entryManife
 		drifted = containerizedConfigHasDrifted(serverManifest.ContainerizedConfig, entryManifest.ContainerizedConfig, defaultDenyAllEgress)
 	case types.RuntimeRemote:
 		drifted = remoteConfigHasDrifted(serverManifest.RemoteConfig, entryManifest.RemoteConfig)
+	case types.RuntimeOpenAPI:
+		drifted = !reflect.DeepEqual(serverManifest.OpenAPIConfig, entryManifest.OpenAPIConfig)
 	default:
 		return false, fmt.Errorf("unknown runtime type: %s", serverManifest.Runtime)
 	}

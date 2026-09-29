@@ -1,6 +1,7 @@
 package mcpserver
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -19,6 +20,55 @@ import (
 	kclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
+
+func TestOpenAPIConfigurationDrift(t *testing.T) {
+	config := func(schema, source, baseURL string) *types.OpenAPIRuntimeConfig {
+		return &types.OpenAPIRuntimeConfig{
+			Source:  types.OpenAPISource{URL: source},
+			Schema:  &types.OpenAPISchema{Raw: json.RawMessage(schema)},
+			BaseURL: baseURL,
+		}
+	}
+
+	for _, test := range []struct {
+		name    string
+		server  *types.OpenAPIRuntimeConfig
+		catalog *types.OpenAPIRuntimeConfig
+		drifted bool
+	}{
+		{
+			name:    "same snapshot",
+			server:  config(`{"servers":[{"url":"https://api.example.com"}]}`, "https://example.com/schema", ""),
+			catalog: config(`{"servers":[{"url":"https://api.example.com"}]}`, "https://example.com/schema", ""),
+		},
+		{
+			name:    "default server changed",
+			server:  config(`{"servers":[{"url":"https://api.example.com"}]}`, "https://example.com/schema", ""),
+			catalog: config(`{"servers":[{"url":"https://other.example.com"}]}`, "https://example.com/schema", ""),
+			drifted: true,
+		},
+		{
+			name:    "source changed",
+			server:  config(`{}`, "https://example.com/schema", ""),
+			catalog: config(`{}`, "https://example.com/other", ""),
+			drifted: true,
+		},
+		{
+			name:    "override changed",
+			server:  config(`{}`, "https://example.com/schema", ""),
+			catalog: config(`{}`, "https://example.com/schema", "https://other.example.com"),
+			drifted: true,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			server := types.MCPServerManifest{Runtime: types.RuntimeOpenAPI, OpenAPIConfig: test.server}
+			catalog := types.MCPServerCatalogEntryManifest{Runtime: types.RuntimeOpenAPI, OpenAPIConfig: test.catalog}
+			drifted, err := configurationHasDrifted(server, catalog, false)
+			require.NoError(t, err)
+			require.Equal(t, test.drifted, drifted)
+		})
+	}
+}
 
 func TestConfigurationHasDrifted(t *testing.T) {
 	gatewayClient := newTestGatewayClient(t)

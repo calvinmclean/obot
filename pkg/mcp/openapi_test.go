@@ -92,6 +92,10 @@ func TestOpenAPISnapshotDeployment(t *testing.T) {
 	server.Spec.Manifest.OpenAPIConfig.Schema = testOpenAPISchema(strings.ReplaceAll(storedOpenAPISchema, "Test API", "Updated API"))
 	changed := openAPITestConfig(t, server, map[string]string{"Authorization": "secret-key"})
 	require.NotEqual(t, originalID, serverID(changed))
+	server.Spec.Manifest.OpenAPIConfig.Schema = testOpenAPISchema(strings.ReplaceAll(storedOpenAPISchema, "api.example.com", "other.example.com"))
+	changed = openAPITestConfig(t, server, map[string]string{"Authorization": "secret-key"})
+	require.Equal(t, "OPENAPI_BASE_URL=https://other.example.com/v1/", changed.Env[0])
+	require.NotEqual(t, originalID, serverID(changed))
 	server.Spec.Manifest.OpenAPIConfig.Schema = testOpenAPISchema(storedOpenAPISchema)
 	server.Spec.Manifest.OpenAPIConfig.BaseURL = "https://other.example.com"
 	changed = openAPITestConfig(t, server, map[string]string{"Authorization": "secret-key"})
@@ -137,6 +141,22 @@ func TestOpenAPIInvalidDeployment(t *testing.T) {
 		{
 			name:   "null snapshot",
 			mutate: func(m *types.MCPServerManifest) { m.OpenAPIConfig.Schema = testOpenAPISchema("null") },
+		},
+		{
+			name: "unsupported OpenAPI version",
+			mutate: func(m *types.MCPServerManifest) {
+				m.OpenAPIConfig.Schema = testOpenAPISchema(strings.Replace(storedOpenAPISchema, "3.1.0", "2.0", 1))
+			},
+		},
+		{
+			name: "external reference",
+			mutate: func(m *types.MCPServerManifest) {
+				m.OpenAPIConfig.Schema = testOpenAPISchema(strings.Replace(storedOpenAPISchema, `"paths":{}`, `"paths":{"/x":{"$ref":"https://example.com/path"}}`, 1))
+			},
+		},
+		{
+			name:   "YAML snapshot",
+			mutate: func(m *types.MCPServerManifest) { m.OpenAPIConfig.Schema = testOpenAPISchema("openapi: 3.1.0\n") },
 		},
 		{
 			name: "schema limit",
@@ -277,6 +297,25 @@ func TestOpenAPIKubernetesFiles(t *testing.T) {
 	config.Files[1].Data += "x"
 	_, err = backend.k8sObjects(context.Background(), config)
 	require.ErrorContains(t, err, "combined mounted files")
+}
+
+func TestOpenAPIKubernetesMaximumSchema(t *testing.T) {
+	const marker = `"paths":{}`
+	const withPadding = `"x-padding":"","paths":{}`
+	padding := strings.Repeat("x", openapi.MaxSchemaBytes-len(storedOpenAPISchema)-(len(withPadding)-len(marker)))
+	schema := strings.Replace(storedOpenAPISchema, marker, `"x-padding":"`+padding+`","paths":{}`, 1)
+	require.Len(t, schema, openapi.MaxSchemaBytes)
+
+	server := openAPITestServer()
+	server.Spec.Manifest.OpenAPIConfig.Schema = testOpenAPISchema(schema)
+	config := openAPITestConfig(t, server, map[string]string{"Authorization": "key"})
+	backend := newTestKubernetesBackend(t)
+	backend.openAPIImage = "openapi-mcp:test"
+	objects, err := backend.k8sObjects(t.Context(), config)
+	require.NoError(t, err)
+	files := findSecret(t, objects, "openapi-test-mcp-files")
+	require.Equal(t, schema, string(files.Data["openapi-test-OPENAPI_SPEC_FILE"]))
+	require.Len(t, files.Data["openapi-test-OPENAPI_SPEC_FILE"], corev1.MaxSecretSize)
 }
 
 func TestOpenAPIBackendImageSelection(t *testing.T) {

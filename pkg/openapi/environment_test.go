@@ -50,6 +50,11 @@ func TestEnvironmentValidation(t *testing.T) {
 	require.ErrorContains(t, err, "header inputs")
 	_, err = Environment(&Result{BaseURL: "http://api.example.com"}, []types.MCPConfig{header})
 	require.ErrorContains(t, err, "HTTPS")
+	_, err = Environment(&Result{
+		BaseURL:          "https://api.example.com",
+		SuggestedHeaders: []types.MCPConfig{{Key: "X-Required", Usage: types.Header}},
+	}, []types.MCPConfig{header})
+	require.ErrorContains(t, err, "X-Required")
 	header.Key = strings.Repeat("a", maxCredentialHeadersBytes+1)
 	_, err = Environment(result, []types.MCPConfig{header})
 	require.ErrorContains(t, err, "96 KiB")
