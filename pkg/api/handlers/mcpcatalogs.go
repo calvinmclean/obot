@@ -22,7 +22,6 @@ import (
 	"github.com/obot-platform/obot/pkg/mcp"
 	"github.com/obot-platform/obot/pkg/mcpcatalog"
 	"github.com/obot-platform/obot/pkg/openapi"
-	"github.com/obot-platform/obot/pkg/safehttp"
 	v1 "github.com/obot-platform/obot/pkg/storage/apis/obot.obot.ai/v1"
 	"github.com/obot-platform/obot/pkg/system"
 	"github.com/obot-platform/obot/pkg/tunnel"
@@ -52,6 +51,7 @@ type MCPCatalogHandler struct {
 
 type openAPIImporter interface {
 	Import(context.Context, types.OpenAPIRuntimeConfig) (*openapi.Result, error)
+	ValidateSnapshot(context.Context, types.OpenAPIRuntimeConfig) (*openapi.Result, error)
 }
 
 type capacityInfoProvider interface {
@@ -59,6 +59,10 @@ type capacityInfoProvider interface {
 }
 
 func NewMCPCatalogHandler(defaultCatalogPath string, serverURL string, mcpBackend string, sessionManager *mcp.SessionManager, oauthChecker MCPOAuthChecker, gatewayClient *gclient.Client, acrHelper *accesscontrolrule.Helper, secretBindingAllowedLabel string) *MCPCatalogHandler {
+	var remoteURLValidationConfig mcp.RemoteMCPURLValidationConfig
+	if sessionManager != nil {
+		remoteURLValidationConfig = sessionManager.RemoteMCPURLValidationConfig()
+	}
 	return &MCPCatalogHandler{
 		defaultCatalogPath:        defaultCatalogPath,
 		serverURL:                 serverURL,
@@ -69,11 +73,7 @@ func NewMCPCatalogHandler(defaultCatalogPath string, serverURL string, mcpBacken
 		gatewayClient:             gatewayClient,
 		acrHelper:                 acrHelper,
 		secretBindingAllowedLabel: secretBindingAllowedLabel,
-		openAPIImporter: openapi.NewImporter(safehttp.Options{
-			BlockLoopback:  true,
-			BlockPrivateIP: true,
-			BlockLinkLocal: true,
-		}),
+		openAPIImporter:           openapi.NewImporter(remoteURLValidationConfig.SafeHTTPOptions(), false),
 	}
 }
 

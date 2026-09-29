@@ -183,6 +183,6 @@ func TestOpenAPICatalogSchemaFetchIsIsolated(t *testing.T) {
 	writeOpenAPICatalog(t, dir, types.OpenAPISource{URL: source.URL})
 	handler = New("", "", nil, nil, &mcp.SessionManager{}, 0)
 	entries, err = handler.readMCPCatalog(t.Context(), "default", dir, "")
-	require.ErrorContains(t, err, "schema fetch failed")
+	require.ErrorContains(t, err, "schema source URL is blocked")
 	require.Empty(t, entries, "the production importer blocks loopback destinations")
 }
