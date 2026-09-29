@@ -63,6 +63,7 @@ func openAPITestConfig(t *testing.T, server v1.MCPServer, credentials map[string
 func TestOpenAPISnapshotDeployment(t *testing.T) {
 	server := openAPITestServer()
 	config := openAPITestConfig(t, server, map[string]string{"Authorization": "secret-key"})
+
 	require.Equal(t, types.RuntimeOpenAPI, config.Runtime)
 	require.Equal(t, types.RuntimeOpenAPI, server.Spec.Manifest.Runtime)
 	require.Equal(t, 8080, config.ContainerPort)
@@ -89,17 +90,21 @@ func TestOpenAPISnapshotDeployment(t *testing.T) {
 	server.Spec.Manifest.OpenAPIConfig.Source.URL = "https://new-source.invalid/schema"
 	same := openAPITestConfig(t, server, map[string]string{"Authorization": "secret-key"})
 	require.Equal(t, originalID, serverID(same))
+
 	server.Spec.Manifest.OpenAPIConfig.Schema = testOpenAPISchema(strings.ReplaceAll(storedOpenAPISchema, "Test API", "Updated API"))
 	changed := openAPITestConfig(t, server, map[string]string{"Authorization": "secret-key"})
 	require.NotEqual(t, originalID, serverID(changed))
+
 	server.Spec.Manifest.OpenAPIConfig.Schema = testOpenAPISchema(strings.ReplaceAll(storedOpenAPISchema, "api.example.com", "other.example.com"))
 	changed = openAPITestConfig(t, server, map[string]string{"Authorization": "secret-key"})
 	require.Equal(t, "OPENAPI_BASE_URL=https://other.example.com/v1/", changed.Env[0])
 	require.NotEqual(t, originalID, serverID(changed))
+
 	server.Spec.Manifest.OpenAPIConfig.Schema = testOpenAPISchema(storedOpenAPISchema)
 	server.Spec.Manifest.OpenAPIConfig.BaseURL = "https://other.example.com"
 	changed = openAPITestConfig(t, server, map[string]string{"Authorization": "secret-key"})
 	require.NotEqual(t, originalID, serverID(changed))
+
 	server.Spec.Manifest.OpenAPIConfig.BaseURL = ""
 	rollback := openAPITestConfig(t, server, map[string]string{"Authorization": "secret-key"})
 	require.Equal(t, originalID, serverID(rollback))
@@ -309,10 +314,12 @@ func TestOpenAPIKubernetesMaximumSchema(t *testing.T) {
 	server := openAPITestServer()
 	server.Spec.Manifest.OpenAPIConfig.Schema = testOpenAPISchema(schema)
 	config := openAPITestConfig(t, server, map[string]string{"Authorization": "key"})
+
 	backend := newTestKubernetesBackend(t)
 	backend.openAPIImage = "openapi-mcp:test"
 	objects, err := backend.k8sObjects(t.Context(), config)
 	require.NoError(t, err)
+
 	files := findSecret(t, objects, "openapi-test-mcp-files")
 	require.Equal(t, schema, string(files.Data["openapi-test-OPENAPI_SPEC_FILE"]))
 	require.Len(t, files.Data["openapi-test-OPENAPI_SPEC_FILE"], corev1.MaxSecretSize)

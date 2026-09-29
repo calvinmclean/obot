@@ -11,10 +11,12 @@ func configureOpenAPIRuntime(server *ServerConfig, config *types.OpenAPIRuntimeC
 	if config == nil {
 		return nil, fmt.Errorf("openapi runtime requires OpenAPI config")
 	}
+
 	env, err := openapi.SnapshotEnvironment(*config, headers)
 	if err != nil {
 		return nil, err
 	}
+
 	server.ContainerPort = 8080
 	server.ContainerPath = "/mcp"
 	server.HealthzPath = "/healthz"
@@ -24,5 +26,6 @@ func configureOpenAPIRuntime(server *ServerConfig, config *types.OpenAPIRuntimeC
 		Data:    string(config.Schema.Raw),
 		Dynamic: false,
 	}}
+
 	return configureHeaders(server, headers, credentials), nil
 }

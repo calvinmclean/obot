@@ -63,6 +63,7 @@ func TestOpenAPIConfigurationDrift(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			server := types.MCPServerManifest{Runtime: types.RuntimeOpenAPI, OpenAPIConfig: test.server}
 			catalog := types.MCPServerCatalogEntryManifest{Runtime: types.RuntimeOpenAPI, OpenAPIConfig: test.catalog}
+
 			drifted, err := configurationHasDrifted(server, catalog, false)
 			require.NoError(t, err)
 			require.Equal(t, test.drifted, drifted)
