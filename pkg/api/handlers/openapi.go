@@ -76,7 +76,7 @@ func (h *MCPCatalogHandler) prepareOpenAPIEntry(ctx context.Context, manifest *t
 	} else {
 		// Treat submitted snapshots as untrusted input: validate and normalize
 		// them, but do not refetch a URL that may have changed since preview.
-		result, err = openapi.Parse(config.Schema.Raw, *config)
+		result, err = h.openAPIImporter.ValidateSnapshot(ctx, *config)
 	}
 	if err != nil {
 		return err
