@@ -528,7 +528,7 @@ Instead of `source.url`, use `source.content: |` with an inline JSON or YAML sch
 
 Every catalog sync imports the schema again, even if the Git revision or the schema's `info.version` has not changed. Obot stores a normalized JSON snapshot in `openAPIConfig.schema`; do not maintain this field in Git. Changes to the snapshot or runtime settings flag deployed servers for an explicit upgrade. Sync does not replace their deployed snapshots.
 
-If importing or validating a schema fails, the catalog reports a sync error and keeps its last good entry. Schema URLs must be publicly reachable HTTP(S) URLs without authentication or redirects. Catalog access tokens are never forwarded to schema URLs. Schemas are limited to 1 MiB and must be self-contained, without external references.
+If importing or validating a schema fails, the catalog reports a sync error and keeps its last good entry. Schema download URLs and parsed API target URLs use the same localhost, private-IP, and link-local restrictions configured for remote MCP servers. Schema URLs must use HTTP(S) without authentication or redirects; catalog access tokens are never forwarded to them. Schemas are limited to 1 MiB and must be self-contained, without external references.
 
 The operator must configure the hosted OpenAPI wrapper image before deployment. The schema-import UI and source-aware CLI validation are separate from this sync support.
 

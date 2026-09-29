@@ -30,6 +30,10 @@ func (f openAPIImporterFunc) Import(ctx context.Context, config types.OpenAPIRun
 	return f(ctx, config)
 }
 
+func (openAPIImporterFunc) ValidateSnapshot(_ context.Context, config types.OpenAPIRuntimeConfig) (*openapi.Result, error) {
+	return openapi.Parse(config.Schema.Raw, config)
+}
+
 func newOpenAPIHandler() *MCPCatalogHandler {
 	handler := NewMCPCatalogHandler("", "", "docker", &mcp.SessionManager{}, nil, nil, nil, "")
 	handler.openAPIImporter = openAPIImporterFunc(func(_ context.Context, config types.OpenAPIRuntimeConfig) (*openapi.Result, error) {

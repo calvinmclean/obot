@@ -15,6 +15,7 @@ import (
 	"github.com/obot-platform/obot/apiclient/types"
 	gateway "github.com/obot-platform/obot/pkg/gateway/client"
 	"github.com/obot-platform/obot/pkg/jwt/persistent"
+	"github.com/obot-platform/obot/pkg/safehttp"
 	v1 "github.com/obot-platform/obot/pkg/storage/apis/obot.obot.ai/v1"
 	"github.com/obot-platform/obot/pkg/system"
 	"github.com/obot-platform/obot/pkg/tunnel"
@@ -120,6 +121,15 @@ type RemoteMCPURLValidationConfig struct {
 	AllowLocalhostMCP bool
 	AllowPrivateIPMCP bool
 	AllowLinkLocalMCP bool
+}
+
+// SafeHTTPOptions applies the remote MCP address policy to HTTP clients and URL checks.
+func (c RemoteMCPURLValidationConfig) SafeHTTPOptions() safehttp.Options {
+	return safehttp.Options{
+		BlockLoopback:  !c.AllowLocalhostMCP,
+		BlockPrivateIP: !c.AllowPrivateIPMCP,
+		BlockLinkLocal: !c.AllowLinkLocalMCP,
+	}
 }
 
 func NewSessionManager(ctx context.Context, authEnabled bool, globalTokenStore GlobalTokenStore, tokenService *persistent.TokenService, baseURL string, httpListenPort int, opts Options, webhookHelper *WebhookHelper, localK8sConfig *rest.Config, client, cachedClient, obotStorageClient kclient.WithWatch, gatewayClient *gateway.Client, obotNamespace string, tunnelManager *tunnel.Manager) (*SessionManager, error) {

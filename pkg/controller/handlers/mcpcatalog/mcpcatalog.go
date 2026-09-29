@@ -79,11 +79,7 @@ func New(defaultCatalogPath, defaultSystemCatalogPath string, gatewayClient *gcl
 	validationOptions := mcp.ValidationOptions{
 		RemoteMCPURLValidationConfig: remoteURLValidationConfig,
 	}
-	safeHTTPOptions := safehttp.Options{
-		BlockLoopback:  !remoteURLValidationConfig.AllowLocalhostMCP,
-		BlockPrivateIP: !remoteURLValidationConfig.AllowPrivateIPMCP,
-		BlockLinkLocal: !remoteURLValidationConfig.AllowLinkLocalMCP,
-	}
+	safeHTTPOptions := remoteURLValidationConfig.SafeHTTPOptions()
 
 	return &Handler{
 		maxRepoSizeMB:             maxRepoSizeMB,

@@ -131,6 +131,23 @@ func TestDestinationNetworkPolicy(t *testing.T) {
 	}
 }
 
+func TestSnapshotDestinationNetworkPolicy(t *testing.T) {
+	snapshot, err := Parse(usersSchema(t), types.OpenAPIRuntimeConfig{})
+	require.NoError(t, err)
+	config := types.OpenAPIRuntimeConfig{
+		Schema:  &types.OpenAPISchema{Raw: snapshot.Schema},
+		BaseURL: "http://127.0.0.1:9999",
+	}
+	blocked := NewImporter(safehttp.Options{BlockLoopback: true})
+	_, err = blocked.ValidateSnapshot(t.Context(), config)
+	require.ErrorContains(t, err, "API destination is blocked")
+
+	allowed := NewImporter(safehttp.Options{BlockPrivateIP: true, BlockLinkLocal: true})
+	result, err := allowed.ValidateSnapshot(t.Context(), config)
+	require.NoError(t, err)
+	require.Equal(t, config.BaseURL+"/", result.BaseURL)
+}
+
 func TestTypedParsingPreservesSnapshot(t *testing.T) {
 	data := documentWith(t, func(d map[string]any) {
 		d["x-custom"] = map[string]any{"preserved": true}
@@ -251,7 +268,7 @@ func TestURLImport(t *testing.T) {
 		BlockPrivateIP: true,
 		BlockLinkLocal: true,
 	}).Import(context.Background(), config)
-	require.Error(t, err)
+	require.ErrorContains(t, err, "schema source URL is blocked")
 	require.Zero(t, requests.Load())
 	importer := NewImporter(safehttp.Options{BlockPrivateIP: true, BlockLinkLocal: true})
 	first, err := importer.Import(context.Background(), config)
