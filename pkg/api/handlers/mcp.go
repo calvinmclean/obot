@@ -1340,7 +1340,7 @@ func ConvertMCPServer(server v1.MCPServer, credEnv map[string]string, serverURL,
 			continue
 		}
 		configuredValue := credEnv[field.Key]
-		missingRequired := field.Required && !field.Static && configuredValue == ""
+		missingRequired := field.Required && !field.Static && field.Value == "" && configuredValue == ""
 		invalidSelection := configuredValue != "" && !mcp.ConfigurationOptionValueValid(field.ToHeader(), credEnv)
 		if missingRequired || invalidSelection {
 			if field.Usage == types.Header {
