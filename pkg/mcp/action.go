@@ -235,6 +235,7 @@ func (sm *SessionManager) serverOrInstanceFromConnectURL(ctx context.Context, id
 				return v1.MCPServer{}, v1.MCPServerInstance{}, err
 			}
 			if err := ValidateServerManifest(ctx, manifest, false, ValidationOptions{
+				DevMode:                      sm.devMode,
 				AllowMissingURL:              allowMissingURL,
 				RemoteMCPURLValidationConfig: sm.remoteURLValidationConfig,
 				ResourceMaximums:             resourceMaximums,
