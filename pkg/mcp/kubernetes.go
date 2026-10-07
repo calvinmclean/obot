@@ -448,7 +448,7 @@ func (k *kubernetesBackend) k8sObjects(ctx context.Context, server ServerConfig)
 		err                error
 	)
 
-	if isContainerizedRuntime(server.Runtime) {
+	if isHTTPContainerRuntime(server.Runtime) {
 		port = server.ContainerPort
 	}
 
@@ -587,7 +587,7 @@ func (k *kubernetesBackend) k8sObjects(ctx context.Context, server ServerConfig)
 
 	containers := make([]corev1.Container, 0, 1)
 
-	if isContainerizedRuntime(server.Runtime) {
+	if isHTTPContainerRuntime(server.Runtime) {
 		if server.Command != "" {
 			command = []string{expandEnvVars(server.Command, fileMapping, nil)}
 		}
@@ -681,7 +681,7 @@ func (k *kubernetesBackend) k8sObjects(ctx context.Context, server ServerConfig)
 							},
 						}
 
-						if !isContainerizedRuntime(server.Runtime) {
+						if !isHTTPContainerRuntime(server.Runtime) {
 							volumes = append(volumes, corev1.Volume{
 								Name: "run-file",
 								Secret: &corev1.SecretVolumeSource{
@@ -709,7 +709,7 @@ func (k *kubernetesBackend) k8sObjects(ctx context.Context, server ServerConfig)
 
 	objs = append(objs, dep)
 
-	if !isContainerizedRuntime(server.Runtime) {
+	if !isHTTPContainerRuntime(server.Runtime) {
 		// Configure mmmcp to expose the command-based MCP server over HTTP.
 		mmmcpFileString, err := constructMCPServerMMMCPYAML(server, secretEnvData)
 		if err != nil {
@@ -754,8 +754,8 @@ func (k *kubernetesBackend) k8sObjects(ctx context.Context, server ServerConfig)
 			TargetPort: intstr.FromString(portName),
 		},
 	}
-	if isContainerizedRuntime(server.Runtime) {
-		// For containerized runtimes, expose the port of the real MCP server for health checks.
+	if isHTTPContainerRuntime(server.Runtime) {
+		// For HTTP container runtimes, expose the MCP server port for health checks.
 		servicePorts = append(servicePorts, corev1.ServicePort{
 			Name:       "mcp",
 			Port:       8080,
