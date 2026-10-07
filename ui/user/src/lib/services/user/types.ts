@@ -692,6 +692,8 @@ export interface OpenAPIRuntimeConfig {
 	source: OpenAPISource;
 	schema?: Record<string, unknown>;
 	baseURL?: string;
+	egressDomains?: string[];
+	denyAllEgress?: boolean;
 }
 export interface MCPConfigurationOption {
 	name: string;
