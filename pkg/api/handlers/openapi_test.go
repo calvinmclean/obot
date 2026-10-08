@@ -19,7 +19,9 @@ import (
 	v1 "github.com/obot-platform/obot/pkg/storage/apis/obot.obot.ai/v1"
 	"github.com/obot-platform/obot/pkg/system"
 	"github.com/stretchr/testify/require"
+	"k8s.io/client-go/rest"
 	kclient "sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 // Use a public IP literal so destination validation does not depend on DNS.
@@ -395,4 +397,41 @@ func TestOpenAPISaveImportedSnapshot(t *testing.T) {
 	var entries v1.MCPServerCatalogEntryList
 	require.NoError(t, storage.List(t.Context(), &entries))
 	require.Len(t, entries.Items, 1)
+}
+
+func TestOpenAPIImportDevelopmentMode(t *testing.T) {
+	client := fake.NewClientBuilder().Build()
+	manager, err := mcp.NewSessionManager(
+		t.Context(),
+		false,
+		true,
+		nil,
+		nil,
+		"",
+		8080,
+		mcp.Options{
+			MCPNamespace:      "obot-mcp",
+			MCPRuntimeBackend: mcp.RuntimeBackendKubernetes,
+		},
+		nil,
+		&rest.Config{Host: "https://127.0.0.1"},
+		client,
+		client,
+		client,
+		nil,
+		"",
+		nil,
+	)
+	require.NoError(t, err)
+
+	handler := NewMCPCatalogHandler("", "", mcp.RuntimeBackendKubernetes, manager, nil, nil, nil, "")
+	config := types.OpenAPIRuntimeConfig{
+		Source: types.OpenAPISource{
+			Content: strings.Replace(apiOpenAPISchema, "https://8.8.8.8", "http://localhost:8000", 1),
+		},
+	}
+
+	result, err := handler.openAPIImporter.Import(t.Context(), config)
+	require.NoError(t, err)
+	require.Equal(t, "http://localhost:8000/", result.BaseURL)
 }

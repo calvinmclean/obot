@@ -59,9 +59,9 @@ type capacityInfoProvider interface {
 }
 
 func NewMCPCatalogHandler(defaultCatalogPath string, serverURL string, mcpBackend string, sessionManager *mcp.SessionManager, oauthChecker MCPOAuthChecker, gatewayClient *gclient.Client, acrHelper *accesscontrolrule.Helper, secretBindingAllowedLabel string) *MCPCatalogHandler {
-	var remoteURLValidationConfig mcp.RemoteMCPURLValidationConfig
+	var validationOptions mcp.ValidationOptions
 	if sessionManager != nil {
-		remoteURLValidationConfig = sessionManager.RemoteMCPURLValidationConfig()
+		validationOptions = sessionManager.ValidationOptions()
 	}
 	return &MCPCatalogHandler{
 		defaultCatalogPath:        defaultCatalogPath,
@@ -73,7 +73,7 @@ func NewMCPCatalogHandler(defaultCatalogPath string, serverURL string, mcpBacken
 		gatewayClient:             gatewayClient,
 		acrHelper:                 acrHelper,
 		secretBindingAllowedLabel: secretBindingAllowedLabel,
-		openAPIImporter:           openapi.NewImporter(remoteURLValidationConfig.SafeHTTPOptions(), false),
+		openAPIImporter:           openapi.NewImporter(validationOptions.RemoteMCPURLValidationConfig.SafeHTTPOptions(), validationOptions.DevMode),
 	}
 }
 
