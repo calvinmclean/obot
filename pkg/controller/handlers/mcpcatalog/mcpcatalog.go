@@ -93,7 +93,7 @@ func New(defaultCatalogPath, defaultSystemCatalogPath string, gatewayClient *gcl
 		remoteURLValidationConfig: validationOptions,
 		mcpBackend:                mcpSessionManager.MCPRuntimeBackend(),
 		mcpSessionManager:         mcpSessionManager,
-		openAPIImporter:           openapi.NewImporter(safeHTTPOptions, false),
+		openAPIImporter:           openapi.NewImporter(safeHTTPOptions, validationOptions.DevMode),
 	}
 }
 

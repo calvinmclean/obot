@@ -17,7 +17,9 @@ import (
 	"github.com/obot-platform/obot/pkg/openapi"
 	v1 "github.com/obot-platform/obot/pkg/storage/apis/obot.obot.ai/v1"
 	"github.com/stretchr/testify/require"
+	"k8s.io/client-go/rest"
 	kclient "sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 // Use a public IP literal so destination validation does not depend on DNS.
@@ -185,4 +187,41 @@ func TestOpenAPICatalogSchemaFetchIsIsolated(t *testing.T) {
 	entries, err = handler.readMCPCatalog(t.Context(), "default", dir, "")
 	require.ErrorContains(t, err, "schema source URL is blocked")
 	require.Empty(t, entries, "the production importer blocks loopback destinations")
+}
+
+func TestOpenAPIGitOpsDevelopmentMode(t *testing.T) {
+	client := fake.NewClientBuilder().Build()
+	manager, err := mcp.NewSessionManager(
+		t.Context(),
+		false,
+		true,
+		nil,
+		nil,
+		"",
+		8080,
+		mcp.Options{
+			MCPNamespace:      "obot-mcp",
+			MCPRuntimeBackend: mcp.RuntimeBackendKubernetes,
+		},
+		nil,
+		&rest.Config{Host: "https://127.0.0.1"},
+		client,
+		client,
+		client,
+		nil,
+		"",
+		nil,
+	)
+	require.NoError(t, err)
+
+	handler := New("", "", nil, nil, manager, 0)
+	config := types.OpenAPIRuntimeConfig{
+		Source: types.OpenAPISource{
+			Content: strings.Replace(catalogOpenAPISchema, "https://8.8.8.8", "http://localhost:8000", 1),
+		},
+	}
+
+	result, err := handler.openAPIImporter.Import(t.Context(), config)
+	require.NoError(t, err)
+	require.Equal(t, "http://localhost:8000/", result.BaseURL)
 }
