@@ -241,9 +241,10 @@ func TestOpenAPICatalogCreateAndUpdate(t *testing.T) {
 			require.NoError(t, handler.UpdateEntry(ctx))
 			require.EqualValues(t, 1, fetches.Load())
 
-			// A changed source with no snapshot is imported; failure must not
+			// A changed source is imported even with a stale snapshot; failure must not
 			// overwrite either the old schema or the settings.
 			manifest.OpenAPIConfig.Source.URL = sourceURL + "/changed"
+			manifest.OpenAPIConfig.Schema = entry.Spec.Manifest.OpenAPIConfig.Schema.DeepCopy()
 			ctx, _ = openAPIRequest(t, storage, scope, http.MethodPut, manifest)
 			ctx.Request.SetPathValue("entry_id", entry.Name)
 			require.Error(t, handler.UpdateEntry(ctx))
@@ -252,7 +253,8 @@ func TestOpenAPICatalogCreateAndUpdate(t *testing.T) {
 			require.Equal(t, "https://8.8.4.4", entry.Spec.Manifest.OpenAPIConfig.BaseURL)
 			require.JSONEq(t, apiOpenAPISchema, string(entry.Spec.Manifest.OpenAPIConfig.Schema.Raw))
 
-			// Explicitly providing a new validated snapshot updates the entry.
+			// A new snapshot for the unchanged URL updates the entry without fetching.
+			manifest.OpenAPIConfig.Source.URL = sourceURL
 			manifest.OpenAPIConfig.Schema = &types.OpenAPISchema{Raw: json.RawMessage(strings.Replace(apiOpenAPISchema, "Example", "Updated", 1))}
 			ctx, _ = openAPIRequest(t, storage, scope, http.MethodPut, manifest)
 			ctx.Request.SetPathValue("entry_id", entry.Name)
@@ -260,6 +262,18 @@ func TestOpenAPICatalogCreateAndUpdate(t *testing.T) {
 			require.EqualValues(t, 2, fetches.Load())
 			require.NoError(t, storage.Get(t.Context(), kclient.ObjectKeyFromObject(&entry), &entry))
 			require.Contains(t, string(entry.Spec.Manifest.OpenAPIConfig.Schema.Raw), "Updated")
+
+			// Changing the URL replaces even an explicitly supplied stale snapshot.
+			schema.Store(strings.Replace(apiOpenAPISchema, "Example", "Refetched", 1))
+			manifest.OpenAPIConfig.Source.URL = sourceURL + "/changed"
+			ctx, _ = openAPIRequest(t, storage, scope, http.MethodPut, manifest)
+			ctx.Request.SetPathValue("entry_id", entry.Name)
+			require.NoError(t, handler.UpdateEntry(ctx))
+			require.EqualValues(t, 3, fetches.Load())
+			require.NoError(t, storage.Get(t.Context(), kclient.ObjectKeyFromObject(&entry), &entry))
+			require.Contains(t, string(entry.Spec.Manifest.OpenAPIConfig.Schema.Raw), "Refetched")
+			require.Equal(t, manifest.OpenAPIConfig.Source.URL, entry.Spec.Manifest.OpenAPIConfig.Source.URL)
+
 			require.NoError(t, storage.Get(t.Context(), kclient.ObjectKeyFromObject(deployed), deployed))
 			require.JSONEq(t, apiOpenAPISchema, string(deployed.Spec.Manifest.OpenAPIConfig.Schema.Raw))
 			require.Empty(t, deployed.Spec.Manifest.OpenAPIConfig.BaseURL, "catalog edits do not upgrade a server")
@@ -434,4 +448,43 @@ func TestOpenAPIImportDevelopmentMode(t *testing.T) {
 	result, err := handler.openAPIImporter.Import(t.Context(), config)
 	require.NoError(t, err)
 	require.Equal(t, "http://localhost:8000/", result.BaseURL)
+}
+
+func TestOpenAPIInlineSnapshotUsesContent(t *testing.T) {
+	oldConfig := &types.OpenAPIRuntimeConfig{
+		Source: types.OpenAPISource{Content: apiOpenAPISchema},
+		Schema: &types.OpenAPISchema{Raw: json.RawMessage(apiOpenAPISchema)},
+	}
+	content := strings.Replace(apiOpenAPISchema, "Example", "Updated", 1)
+
+	for _, test := range []struct {
+		name     string
+		previous *types.OpenAPIRuntimeConfig
+	}{
+		{
+			name: "create",
+		},
+		{
+			name:     "update",
+			previous: oldConfig,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			manifest := types.MCPServerCatalogEntryManifest{
+				Runtime: types.RuntimeOpenAPI,
+				OpenAPIConfig: &types.OpenAPIRuntimeConfig{
+					Source: types.OpenAPISource{Content: content},
+					Schema: oldConfig.Schema.DeepCopy(),
+				},
+			}
+			handler := newOpenAPIHandler()
+			require.NoError(t, handler.prepareOpenAPIEntry(t.Context(), &manifest, test.previous))
+			require.JSONEq(t, content, string(manifest.OpenAPIConfig.Schema.Raw))
+
+			manifest.OpenAPIConfig.Source.Content = "invalid schema"
+			before := manifest.OpenAPIConfig.DeepCopy()
+			require.Error(t, handler.prepareOpenAPIEntry(t.Context(), &manifest, test.previous))
+			require.Equal(t, before, manifest.OpenAPIConfig, "failed imports must not modify the manifest")
+		})
+	}
 }

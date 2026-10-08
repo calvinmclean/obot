@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/obot-platform/obot/apiclient/types"
+	"github.com/obot-platform/obot/pkg/safehttp"
 	"github.com/stretchr/testify/require"
 )
 
@@ -30,8 +31,13 @@ func TestImportBeforeConfiguringDestination(t *testing.T) {
 			config := types.OpenAPIRuntimeConfig{Schema: &types.OpenAPISchema{Raw: result.Schema}}
 			_, err = SnapshotEnvironment(config, result.SuggestedHeaders, false)
 			require.ErrorContains(t, err, "configure baseURL")
+			_, err = ValidateSnapshotEnvironment(t.Context(), config, result.SuggestedHeaders, safehttp.Options{}, false)
+			require.EqualError(t, err, "no usable server URL; configure baseURL")
 			config.BaseURL = "https://api.example.com/v3"
 			_, err = SnapshotEnvironment(config, result.SuggestedHeaders, false)
+			require.NoError(t, err)
+			config.BaseURL = "https://8.8.8.8/v3"
+			_, err = ValidateSnapshotEnvironment(t.Context(), config, result.SuggestedHeaders, safehttp.Options{}, false)
 			require.NoError(t, err)
 			config.BaseURL = "http://api.example.com/v3"
 			_, err = SnapshotEnvironment(config, result.SuggestedHeaders, false)

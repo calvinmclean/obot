@@ -33,6 +33,9 @@ func ValidateSnapshotEnvironment(ctx context.Context, config types.OpenAPIRuntim
 	if err != nil {
 		return nil, err
 	}
+	if result.BaseURL == "" {
+		return nil, fmt.Errorf("no usable server URL; configure baseURL")
+	}
 	if err := ValidateDestination(ctx, result.BaseURL, options, devMode); err != nil {
 		return nil, err
 	}
