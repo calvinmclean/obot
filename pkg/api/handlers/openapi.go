@@ -55,8 +55,8 @@ func (h *MCPCatalogHandler) ImportOpenAPI(req api.Context) error {
 }
 
 // prepareOpenAPIEntry accepts either an imported snapshot or a source to import.
-// Updating settings alone keeps the previous snapshot; importing a new snapshot
-// is an explicit action. Nothing here updates deployed server manifests.
+// Updating settings for an unchanged URL keeps the previous snapshot. Inline
+// content and changed URLs are imported anew. Nothing here updates deployed servers.
 func (h *MCPCatalogHandler) prepareOpenAPIEntry(ctx context.Context, manifest *types.MCPServerCatalogEntryManifest, previous *types.OpenAPIRuntimeConfig) error {
 	if manifest.Runtime != types.RuntimeOpenAPI || manifest.OpenAPIConfig == nil {
 		return nil // The runtime validator reports missing configuration.
@@ -71,11 +71,12 @@ func (h *MCPCatalogHandler) prepareOpenAPIEntry(ctx context.Context, manifest *t
 
 	var result *openapi.Result
 	var err error
-	if config.Schema == nil {
+	if config.Source.Content != "" || (previous != nil && config.Source != previous.Source) || config.Schema == nil {
 		result, err = h.openAPIImporter.Import(ctx, *config)
 	} else {
 		// Treat submitted snapshots as untrusted input: validate and normalize
-		// them, but do not refetch a URL that may have changed since preview.
+		// them, but do not refetch an unchanged URL or a URL supplied on create
+		// that may have changed since preview.
 		result, err = h.openAPIImporter.ValidateSnapshot(ctx, *config)
 	}
 	if err != nil {
