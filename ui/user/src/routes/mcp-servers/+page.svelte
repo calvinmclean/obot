@@ -290,8 +290,6 @@
 		{#if selectedView === 'entries'}
 			{#if newServerType === 'openapi' && !initialOpenAPIImport}
 				<OpenAPIImportDialog
-					entity={hasAdminAccess ? 'catalog' : 'workspace'}
-					id={hasAdminAccess ? defaultCatalogId : (workspaceId ?? '')}
 					onComplete={(draft) => {
 						initialOpenAPIImport = draft;
 					}}
