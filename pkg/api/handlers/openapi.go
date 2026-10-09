@@ -9,24 +9,11 @@ import (
 	"github.com/obot-platform/obot/apiclient/types"
 	"github.com/obot-platform/obot/pkg/api"
 	"github.com/obot-platform/obot/pkg/openapi"
-	v1 "github.com/obot-platform/obot/pkg/storage/apis/obot.obot.ai/v1"
 )
 
 // ImportOpenAPI returns a snapshot for the catalog creation form without
 // creating a draft entry. Uploaded files are sent as source.content (JSON/YAML).
 func (h *MCPCatalogHandler) ImportOpenAPI(req api.Context) error {
-	if catalogID := req.PathValue("catalog_id"); catalogID != "" {
-		if err := req.Get(&v1.MCPCatalog{}, catalogID); err != nil {
-			return err
-		}
-	} else if workspaceID := req.PathValue("workspace_id"); workspaceID != "" {
-		if err := req.Get(&v1.PowerUserWorkspace{}, workspaceID); err != nil {
-			return err
-		}
-	} else {
-		return types.NewErrBadRequest("either catalog_id or workspace_id is required")
-	}
-
 	var config types.OpenAPIRuntimeConfig
 	if err := req.Read(&config); err != nil {
 		if syntaxErr, ok := errors.AsType[*json.SyntaxError](err); ok {
@@ -61,28 +48,28 @@ func (h *MCPCatalogHandler) prepareOpenAPIEntry(ctx context.Context, manifest *t
 	if manifest.Runtime != types.RuntimeOpenAPI || manifest.OpenAPIConfig == nil {
 		return nil // The runtime validator reports missing configuration.
 	}
-	config := manifest.OpenAPIConfig.DeepCopy()
+	config := *manifest.OpenAPIConfig
 	if err := openapi.ValidateSource(config.Source); err != nil {
 		return err
 	}
 	if config.Schema == nil && previous != nil && config.Source == previous.Source {
-		config.Schema = previous.Schema.DeepCopy()
+		config.Schema = previous.Schema
 	}
 
 	var result *openapi.Result
 	var err error
 	if config.Source.Content != "" || (previous != nil && config.Source != previous.Source) || config.Schema == nil {
-		result, err = h.openAPIImporter.Import(ctx, *config)
+		result, err = h.openAPIImporter.Import(ctx, config)
 	} else {
-		// Treat submitted snapshots as untrusted input: validate and normalize
-		// them, but do not refetch an unchanged URL or a URL supplied on create
-		// that may have changed since preview.
-		result, err = h.openAPIImporter.ValidateSnapshot(ctx, *config)
+		// A create request can keep source.url and include the schema returned by
+		// ImportOpenAPI. Validate that snapshot without fetching the URL again.
+		// Settings-only updates likewise validate the previously saved snapshot.
+		result, err = h.openAPIImporter.ValidateSnapshot(ctx, config)
 	}
 	if err != nil {
 		return err
 	}
 	config.Schema = &types.OpenAPISchema{Raw: result.Schema}
-	manifest.OpenAPIConfig = config
+	manifest.OpenAPIConfig = &config
 	return nil
 }

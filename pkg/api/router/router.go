@@ -261,7 +261,6 @@ func NewRouter(ctx context.Context, services *services.Services) (*Router, error
 	mux.HandleFunc("GET /api/mcp-catalogs/{catalog_id}/entries", mcpCatalogs.ListEntries)
 	mux.HandleFunc("GET /api/mcp-catalogs/{catalog_id}/entries/{entry_id}", mcpCatalogs.GetEntry)
 	mux.HandleFunc("POST /api/mcp-catalogs/{catalog_id}/entries", mcpCatalogs.CreateEntry)
-	mux.HandleFunc("POST /api/mcp-catalogs/{catalog_id}/openapi/import", mcpCatalogs.ImportOpenAPI)
 	mux.HandleFunc("PUT /api/mcp-catalogs/{catalog_id}/entries/{entry_id}", mcpCatalogs.UpdateEntry)
 	mux.HandleFunc("POST /api/mcp-catalogs/{catalog_id}/entries/{entry_id}/reveal", mcpCatalogs.RevealEntry)
 	mux.HandleFunc("POST /api/mcp-catalogs/{catalog_id}/entries/{entry_id}/accept-ownership", mcpCatalogs.AcceptEntryOwnership)
@@ -319,11 +318,13 @@ func NewRouter(ctx context.Context, services *services.Services) (*Router, error
 	mux.HandleFunc("PUT /api/workspaces/{workspace_id}/access-control-rules/{access_control_rule_id}", accessControlRules.Update)
 	mux.HandleFunc("DELETE /api/workspaces/{workspace_id}/access-control-rules/{access_control_rule_id}", accessControlRules.Delete)
 
+	// OpenAPI schema import (PowerUser and higher only)
+	mux.HandleFunc("POST /api/openapi/import", mcpCatalogs.ImportOpenAPI)
+
 	// Workspace-scoped MCP Server Catalog Entries (PowerUser and higher only)
 	mux.HandleFunc("GET /api/workspaces/{workspace_id}/entries", mcpCatalogs.ListEntries)
 	mux.HandleFunc("GET /api/workspaces/{workspace_id}/entries/{entry_id}", mcpCatalogs.GetEntry)
 	mux.HandleFunc("POST /api/workspaces/{workspace_id}/entries", mcpCatalogs.CreateEntry)
-	mux.HandleFunc("POST /api/workspaces/{workspace_id}/openapi/import", mcpCatalogs.ImportOpenAPI)
 	mux.HandleFunc("PUT /api/workspaces/{workspace_id}/entries/{entry_id}", mcpCatalogs.UpdateEntry)
 	mux.HandleFunc("POST /api/workspaces/{workspace_id}/entries/{entry_id}/reveal", mcpCatalogs.RevealEntry)
 	mux.HandleFunc("DELETE /api/workspaces/{workspace_id}/entries/{entry_id}", mcpCatalogs.DeleteEntry)

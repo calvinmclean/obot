@@ -52,7 +52,7 @@ func newOpenAPIHandler() *MCPCatalogHandler {
 }
 
 func TestOpenAPIImportRequestErrorDetails(t *testing.T) {
-	storage := newFakeStorage(t, &v1.MCPCatalog{Name: "scope", Namespace: system.DefaultNamespace})
+	storage := newFakeStorage(t)
 	for _, test := range []struct {
 		name string
 		body string
@@ -74,7 +74,7 @@ func TestOpenAPIImportRequestErrorDetails(t *testing.T) {
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			ctx, _ := openAPIRequest(t, storage, "catalog_id", http.MethodPost, nil)
+			ctx, _ := openAPIRequest(t, storage, "", http.MethodPost, nil)
 			ctx.Request.Body = io.NopCloser(strings.NewReader(test.body))
 			err := newOpenAPIHandler().ImportOpenAPI(ctx)
 			require.ErrorContains(t, err, test.want)
@@ -88,7 +88,9 @@ func openAPIRequest(t *testing.T, storage kclient.WithWatch, scope, method strin
 	data, err := json.Marshal(body)
 	require.NoError(t, err)
 	request := httptest.NewRequest(method, "/", bytes.NewReader(data))
-	request.SetPathValue(scope, "scope")
+	if scope != "" {
+		request.SetPathValue(scope, "scope")
+	}
 	recorder := httptest.NewRecorder()
 	return api.Context{
 		Request:        request,
@@ -99,14 +101,9 @@ func openAPIRequest(t *testing.T, storage kclient.WithWatch, scope, method strin
 }
 
 func TestOpenAPIImportDoesNotCreateEntry(t *testing.T) {
-	for _, scope := range []string{"catalog_id", "workspace_id"} {
-		t.Run(scope, func(t *testing.T) {
-			storage := newFakeStorage(t,
-				&v1.MCPCatalog{Name: "scope", Namespace: system.DefaultNamespace},
-				&v1.PowerUserWorkspace{Name: "scope", Namespace: system.DefaultNamespace},
-			)
-			config := types.OpenAPIRuntimeConfig{
-				Source: types.OpenAPISource{Content: `
+	storage := newFakeStorage(t)
+	config := types.OpenAPIRuntimeConfig{
+		Source: types.OpenAPISource{Content: `
 openapi: 3.1.0
 info:
   title: Example
@@ -122,28 +119,26 @@ components:
 security:
   - token: []
 `},
-				BaseURL: "https://api.example.com/v1",
-			}
-			ctx, response := openAPIRequest(t, storage, scope, http.MethodPost, config)
-			require.NoError(t, newOpenAPIHandler().ImportOpenAPI(ctx))
-			var result types.OpenAPIImportResponse
-			require.NoError(t, json.Unmarshal(response.Body.Bytes(), &result))
-			require.True(t, json.Valid(result.Schema.Raw))
-			require.Equal(t, "Example", result.SuggestedMetadata.Name)
-			require.Equal(t, "https://api.example.com/v1/", result.BaseURL)
-			require.Len(t, result.SuggestedHeaders, 1)
-			require.Equal(t, "Authorization", result.SuggestedHeaders[0].Key)
-			require.Equal(t, "Bearer ", result.SuggestedHeaders[0].Prefix)
-			require.Empty(t, result.SuggestedHeaders[0].Value)
-			var entries v1.MCPServerCatalogEntryList
-			require.NoError(t, storage.List(t.Context(), &entries))
-			require.Empty(t, entries.Items)
-		})
+		BaseURL: "https://api.example.com/v1",
 	}
+	ctx, response := openAPIRequest(t, storage, "", http.MethodPost, config)
+	require.NoError(t, newOpenAPIHandler().ImportOpenAPI(ctx))
+	var result types.OpenAPIImportResponse
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &result))
+	require.True(t, json.Valid(result.Schema.Raw))
+	require.Equal(t, "Example", result.SuggestedMetadata.Name)
+	require.Equal(t, "https://api.example.com/v1/", result.BaseURL)
+	require.Len(t, result.SuggestedHeaders, 1)
+	require.Equal(t, "Authorization", result.SuggestedHeaders[0].Key)
+	require.Equal(t, "Bearer ", result.SuggestedHeaders[0].Prefix)
+	require.Empty(t, result.SuggestedHeaders[0].Value)
+	var entries v1.MCPServerCatalogEntryList
+	require.NoError(t, storage.List(t.Context(), &entries))
+	require.Empty(t, entries.Items)
 }
 
 func TestOpenAPIImportRejectsInvalidInput(t *testing.T) {
-	storage := newFakeStorage(t, &v1.MCPCatalog{Name: "scope", Namespace: system.DefaultNamespace})
+	storage := newFakeStorage(t)
 	for _, test := range []struct {
 		name   string
 		config types.OpenAPIRuntimeConfig
@@ -178,7 +173,7 @@ func TestOpenAPIImportRejectsInvalidInput(t *testing.T) {
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			ctx, _ := openAPIRequest(t, storage, "catalog_id", http.MethodPost, test.config)
+			ctx, _ := openAPIRequest(t, storage, "", http.MethodPost, test.config)
 			err := newOpenAPIHandler().ImportOpenAPI(ctx)
 			require.ErrorContains(t, err, test.want)
 			require.NotContains(t, err.Error(), "secret-invalid-schema")
@@ -391,7 +386,7 @@ func TestOpenAPISaveImportedSnapshot(t *testing.T) {
 	storage := newFakeStorage(t, &v1.MCPCatalog{Name: "scope", Namespace: system.DefaultNamespace})
 	handler := newOpenAPIHandler()
 	config := types.OpenAPIRuntimeConfig{Source: types.OpenAPISource{Content: apiOpenAPISchema}}
-	ctx, response := openAPIRequest(t, storage, "catalog_id", http.MethodPost, config)
+	ctx, response := openAPIRequest(t, storage, "", http.MethodPost, config)
 	require.NoError(t, handler.ImportOpenAPI(ctx))
 	var imported types.OpenAPIImportResponse
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &imported))
@@ -487,4 +482,30 @@ func TestOpenAPIInlineSnapshotUsesContent(t *testing.T) {
 			require.Equal(t, before, manifest.OpenAPIConfig, "failed imports must not modify the manifest")
 		})
 	}
+}
+
+func TestOpenAPISnapshotReuseDoesNotMutateInput(t *testing.T) {
+	previous := &types.OpenAPIRuntimeConfig{
+		Source: types.OpenAPISource{URL: "https://unreachable.invalid/schema"},
+		Schema: &types.OpenAPISchema{Raw: json.RawMessage(apiOpenAPISchema)},
+	}
+	config := &types.OpenAPIRuntimeConfig{
+		Source:        previous.Source,
+		EgressDomains: []string{"8.8.8.8"},
+		DenyAllEgress: new(true),
+	}
+	manifest := types.MCPServerCatalogEntryManifest{
+		Runtime:       types.RuntimeOpenAPI,
+		OpenAPIConfig: config,
+	}
+	configBefore := config.DeepCopy()
+	previousBefore := previous.DeepCopy()
+	handler := NewMCPCatalogHandler("", "", "docker", nil, nil, nil, nil, "")
+
+	require.NoError(t, handler.prepareOpenAPIEntry(t.Context(), &manifest, previous))
+	require.Equal(t, configBefore, config)
+	require.Equal(t, previousBefore, previous)
+	require.NotSame(t, config, manifest.OpenAPIConfig)
+	require.NotSame(t, previous.Schema, manifest.OpenAPIConfig.Schema)
+	require.JSONEq(t, apiOpenAPISchema, string(manifest.OpenAPIConfig.Schema.Raw))
 }
