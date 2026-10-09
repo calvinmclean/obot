@@ -134,7 +134,6 @@ func documentLoadError(canonical []byte) error {
 		}
 	}
 	return fmt.Errorf("cannot parse OpenAPI document or resolve local references")
-
 }
 
 // securityHeaders turns declared API-key and bearer schemes into editable Obot

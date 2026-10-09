@@ -23,7 +23,9 @@ import (
 )
 
 // Use a public IP literal so destination validation does not depend on DNS.
-const catalogOpenAPISchema = `{"openapi":"3.1.0","info":{"title":"Example","version":"1"},"servers":[{"url":"https://8.8.8.8"}],"paths":{}}`
+const (
+	catalogOpenAPISchema = `{"openapi":"3.1.0","info":{"title":"Example","version":"1"},"servers":[{"url":"https://8.8.8.8"}],"paths":{}}`
+)
 
 type openAPIImporterFunc func(context.Context, types.OpenAPIRuntimeConfig) (*openapi.Result, error)
 
