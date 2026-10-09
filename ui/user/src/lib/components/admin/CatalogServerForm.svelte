@@ -97,6 +97,7 @@
 	let showRequired = $state<Record<string, boolean>>({});
 	let showInvalid = $state<Record<string, boolean>>({});
 	let loading = $state(false);
+	let openAPIImporting = $state(false);
 	let mcpResourceDefaults = $state<MCPResourceRequirements>();
 	let mcpTunnels = $state<MCPTunnel[]>();
 	let secretBindingTargets = $state<MCPAllowedSecretBindingTarget[]>();
@@ -958,6 +959,7 @@
 		{:else if formData.runtime === 'openapi' && formData.openAPIConfig && id}
 			<OpenAPIConfiguration
 				bind:config={formData.openAPIConfig}
+				onEditingChange={(editing) => (openAPIImporting = editing)}
 				{showEgressDomains}
 				{defaultDenyAllEgress}
 				{importedBaseURL}
@@ -1074,7 +1076,8 @@
 				type="submit"
 				data-form-action="save"
 				class="btn btn-primary flex items-center gap-1"
-				disabled={loading || (formData.runtime === 'openapi' && !formData.openAPIConfig?.schema)}
+				disabled={loading ||
+					(formData.runtime === 'openapi' && (!formData.openAPIConfig?.schema || openAPIImporting))}
 				aria-busy={loading}
 				id={CATALOG_SERVER_FIELD_IDS.submitBtn}
 			>
