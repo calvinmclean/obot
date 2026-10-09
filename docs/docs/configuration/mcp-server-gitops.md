@@ -552,7 +552,7 @@ config:
     prefix: "Bearer "
 ```
 
-Instead of `source.url`, use `source.content: |` with an inline JSON or YAML schema. Set exactly one source. Omit `config` for APIs without authentication. Configure any credential headers declared by the schema; GitOps does not automatically add them. Supply credentials through Obot, not in the catalog file. OAuth flows are not supported; OAuth declarations do not prevent importing a schema.
+Instead of `source.url`, use `source.content: |` with an inline JSON or YAML schema. Set exactly one source. Do not set `schema`; Obot generates it from the source, and entries that set it fail to sync. Omit `config` for APIs without authentication. Configure any credential headers declared by the schema; GitOps does not automatically add them. Supply credentials through Obot, not in the catalog file. OAuth flows are not supported; OAuth declarations do not prevent importing a schema.
 
 If importing or validating a schema fails, the catalog reports a sync error and keeps its last good entry. Schema download URLs and parsed API target URLs use the same localhost, private-IP, and link-local restrictions configured for remote MCP servers. In production, schema URLs and API targets must use HTTPS. Schema URLs cannot include authentication or redirects, and catalog access tokens are never forwarded to them. Schemas are limited to 1 MiB and must be self-contained, without external references.
 

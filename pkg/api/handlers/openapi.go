@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 
 	"github.com/obot-platform/obot/apiclient/types"
@@ -28,6 +27,9 @@ func (h *MCPCatalogHandler) ImportOpenAPI(req api.Context) error {
 		}
 		return err
 	}
+	if err := openapi.ValidateInput(config); err != nil {
+		return types.NewErrBadRequest("invalid OpenAPI import request: %v", err)
+	}
 	// The importer uses its own bounded, SSRF-protected client. It never
 	// receives request headers, user credentials, or a caller-provided client.
 	result, err := h.openAPIImporter.Import(req.Context(), config)
@@ -49,11 +51,8 @@ func (h *MCPCatalogHandler) prepareOpenAPIEntry(ctx context.Context, manifest *t
 		return nil // The runtime validator reports missing configuration.
 	}
 	config := *manifest.OpenAPIConfig
-	if err := openapi.ValidateSource(config.Source); err != nil {
+	if err := openapi.ValidateInput(config); err != nil {
 		return err
-	}
-	if config.Source.URL != "" && config.Schema != nil {
-		return fmt.Errorf("schema must be omitted when source.url is provided")
 	}
 
 	result, err := h.openAPIImporter.Import(ctx, config)
