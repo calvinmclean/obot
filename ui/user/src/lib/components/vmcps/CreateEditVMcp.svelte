@@ -89,6 +89,7 @@
 			const created = await UserService.createVMCP({
 				displayName: form.displayName.trim(),
 				description: form.description.trim(),
+				toolSearch: form.toolSearch,
 				components: creatingComponents
 			});
 
@@ -108,7 +109,8 @@
 			const updatedVMcp = await UserService.updateVMCP(vmcp.id, {
 				...vmcpManifest(vmcp),
 				displayName: form.displayName.trim(),
-				description: form.description.trim()
+				description: form.description.trim(),
+				toolSearch: form.toolSearch
 			});
 			success.add(m.vmcps_vmcp_updated({ name: updatedVMcp.displayName }));
 			closeDialog();
@@ -145,7 +147,8 @@
 		selectedVMcp = vmcp;
 		form = {
 			displayName: vmcp.displayName ?? '',
-			description: vmcp.description ?? ''
+			description: vmcp.description ?? '',
+			toolSearch: vmcp.toolSearch ?? false
 		};
 		showRequired = {};
 		openDialog();
@@ -246,6 +249,26 @@
 				<p class="text-error text-xs" role="alert">{m.vmcps_description_required()}</p>
 			{/if}
 		</div>
+
+		<label
+			for="vmcp-tool-search"
+			class="border-base-300 dark:border-base-400 mt-4 flex items-center justify-between gap-4 rounded-lg border p-4"
+		>
+			<span>
+				<span class="text-sm font-medium">Tool search</span>
+				<span class="block text-xs opacity-70">
+					Expose search and generic invocation instead of listing tools directly.
+				</span>
+			</span>
+			<input
+				id="vmcp-tool-search"
+				type="checkbox"
+				class="toggle shrink-0"
+				bind:checked={form.toolSearch}
+				disabled={readonly}
+				aria-label="Tool search"
+			/>
+		</label>
 
 		<div class="flex grow"></div>
 
