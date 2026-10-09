@@ -100,14 +100,6 @@ func (i *Importer) Import(ctx context.Context, config types.OpenAPIRuntimeConfig
 	return i.parse(ctx, data, config)
 }
 
-// ValidateSnapshot checks a supplied snapshot and its target without fetching Source.
-func (i *Importer) ValidateSnapshot(ctx context.Context, config types.OpenAPIRuntimeConfig) (*Result, error) {
-	if config.Schema == nil {
-		return nil, fmt.Errorf("a stored OpenAPI schema is required")
-	}
-	return i.parse(ctx, config.Schema.Raw, config)
-}
-
 // parse checks the resolved destination against the importer's transport and
 // network policies.
 // It makes no request to the destination.
