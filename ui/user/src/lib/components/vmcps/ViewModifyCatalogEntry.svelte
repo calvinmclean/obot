@@ -210,8 +210,6 @@
 
 {#if importingOpenAPI}
 	<OpenAPIImportDialog
-		id={createScopeId}
-		entity={createEntity}
 		onComplete={(draft) => {
 			initialOpenAPIImport = draft;
 			importingOpenAPI = false;
