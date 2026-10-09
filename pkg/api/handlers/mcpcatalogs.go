@@ -51,7 +51,6 @@ type MCPCatalogHandler struct {
 
 type openAPIImporter interface {
 	Import(context.Context, types.OpenAPIRuntimeConfig) (*openapi.Result, error)
-	ValidateSnapshot(context.Context, types.OpenAPIRuntimeConfig) (*openapi.Result, error)
 }
 
 type capacityInfoProvider interface {
@@ -342,7 +341,7 @@ func (h *MCPCatalogHandler) CreateEntry(req api.Context) error {
 		return types.NewErrBadRequest("failed to read entry manifest: %v", err)
 	}
 	mcpcatalog.NormalizeManifest(&manifest)
-	if err := h.prepareOpenAPIEntry(req.Context(), &manifest, nil); err != nil {
+	if err := h.prepareOpenAPIEntry(req.Context(), &manifest); err != nil {
 		return types.NewErrBadRequest("failed to prepare OpenAPI entry: %v", err)
 	}
 	if err := validateCatalogEntryManifestWithResourceMaximums(req, manifest, false, h.sessionManager); err != nil {
@@ -454,7 +453,7 @@ func (h *MCPCatalogHandler) UpdateEntry(req api.Context) error {
 	}
 	mcpcatalog.NormalizeManifest(&manifest)
 
-	if err := h.prepareOpenAPIEntry(req.Context(), &manifest, entry.Spec.Manifest.OpenAPIConfig); err != nil {
+	if err := h.prepareOpenAPIEntry(req.Context(), &manifest); err != nil {
 		return types.NewErrBadRequest("failed to prepare OpenAPI entry: %v", err)
 	}
 	if err := validateCatalogEntryManifestWithResourceMaximums(req, manifest, false, h.sessionManager); err != nil {

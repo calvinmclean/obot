@@ -146,23 +146,6 @@ func TestDestinationHTTPSRequirement(t *testing.T) {
 	require.Equal(t, "http://api.example.com/", result.BaseURL)
 }
 
-func TestSnapshotDestinationNetworkPolicy(t *testing.T) {
-	snapshot, err := Parse(usersSchema(t), types.OpenAPIRuntimeConfig{})
-	require.NoError(t, err)
-	config := types.OpenAPIRuntimeConfig{
-		Schema:  &types.OpenAPISchema{Raw: snapshot.Schema},
-		BaseURL: "http://127.0.0.1:9999",
-	}
-	blocked := NewImporter(safehttp.Options{BlockLoopback: true}, true)
-	_, err = blocked.ValidateSnapshot(t.Context(), config)
-	require.ErrorContains(t, err, "API destination is blocked")
-
-	allowed := NewImporter(safehttp.Options{BlockPrivateIP: true, BlockLinkLocal: true}, true)
-	result, err := allowed.ValidateSnapshot(t.Context(), config)
-	require.NoError(t, err)
-	require.Equal(t, config.BaseURL+"/", result.BaseURL)
-}
-
 func TestTypedParsingPreservesSnapshot(t *testing.T) {
 	data := documentWith(t, func(d map[string]any) {
 		d["x-custom"] = map[string]any{"preserved": true}

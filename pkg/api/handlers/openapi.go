@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 
 	"github.com/obot-platform/obot/apiclient/types"
@@ -41,10 +42,9 @@ func (h *MCPCatalogHandler) ImportOpenAPI(req api.Context) error {
 	})
 }
 
-// prepareOpenAPIEntry accepts either an imported snapshot or a source to import.
-// Updating settings for an unchanged URL keeps the previous snapshot. Inline
-// content and changed URLs are imported anew. Nothing here updates deployed servers.
-func (h *MCPCatalogHandler) prepareOpenAPIEntry(ctx context.Context, manifest *types.MCPServerCatalogEntryManifest, previous *types.OpenAPIRuntimeConfig) error {
+// prepareOpenAPIEntry imports the source on every save. Existing deployments
+// keep their snapshots until explicitly upgraded.
+func (h *MCPCatalogHandler) prepareOpenAPIEntry(ctx context.Context, manifest *types.MCPServerCatalogEntryManifest) error {
 	if manifest.Runtime != types.RuntimeOpenAPI || manifest.OpenAPIConfig == nil {
 		return nil // The runtime validator reports missing configuration.
 	}
@@ -52,20 +52,11 @@ func (h *MCPCatalogHandler) prepareOpenAPIEntry(ctx context.Context, manifest *t
 	if err := openapi.ValidateSource(config.Source); err != nil {
 		return err
 	}
-	if config.Schema == nil && previous != nil && config.Source == previous.Source {
-		config.Schema = previous.Schema
+	if config.Source.URL != "" && config.Schema != nil {
+		return fmt.Errorf("schema must be omitted when source.url is provided")
 	}
 
-	var result *openapi.Result
-	var err error
-	if config.Source.Content != "" || (previous != nil && config.Source != previous.Source) || config.Schema == nil {
-		result, err = h.openAPIImporter.Import(ctx, config)
-	} else {
-		// A create request can keep source.url and include the schema returned by
-		// ImportOpenAPI. Validate that snapshot without fetching the URL again.
-		// Settings-only updates likewise validate the previously saved snapshot.
-		result, err = h.openAPIImporter.ValidateSnapshot(ctx, config)
-	}
+	result, err := h.openAPIImporter.Import(ctx, config)
 	if err != nil {
 		return err
 	}
