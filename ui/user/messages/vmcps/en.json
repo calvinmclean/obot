@@ -336,6 +336,8 @@
 	"vmcps_tool_count_one": "{count} tool",
 	"vmcps_tool_count_other": "{count} tools",
 	"vmcps_tool_no_longer_available": "This tool is no longer available.",
+	"vmcps_tool_search": "Tool search",
+	"vmcps_tool_search_description": "Expose search and generic invocation instead of listing tools directly.",
 	"vmcps_tools": "Tools",
 	"vmcps_tools_enabled": "{count} tools enabled",
 	"vmcps_tools_enabled_approx": "~{count} tools enabled",

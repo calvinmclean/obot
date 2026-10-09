@@ -152,8 +152,10 @@ export function pruneClearedProperties(schema: JSONSchema, value: unknown): unkn
 		for (const [name, propertyValue] of Object.entries(value as Record<string, unknown>)) {
 			const property = schema.properties?.[name];
 			const propertyType = property && schemaType(nonNullableJSONSchema(property) ?? property);
+			// Text inputs render for strings and for schemas without a type.
 			const cleared =
-				propertyValue === undefined || (propertyValue === '' && propertyType === 'string');
+				propertyValue === undefined ||
+				(propertyValue === '' && (propertyType === undefined || propertyType === 'string'));
 			if (cleared && !schema.required?.includes(name)) continue;
 			pruned[name] = property ? pruneClearedProperties(property, propertyValue) : propertyValue;
 		}

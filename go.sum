@@ -182,6 +182,8 @@ github.com/blevesearch/zapx/v17 v17.2.3 h1:UYYJPAt5b2tVxldx5h0jmv23RMsg8/UZKFVya
 github.com/blevesearch/zapx/v17 v17.2.3/go.mod h1:r7mb4QWbDQSkbAnOjCb9iCfkcrzajB4yBdJpuBIo/fE=
 github.com/bshuster-repo/logrus-logstash-hook v1.1.0 h1:o2FzZifLg+z/DN1OFmzTWzZZx/roaqt8IPZCIVco8r4=
 github.com/bshuster-repo/logrus-logstash-hook v1.1.0/go.mod h1:Q2aXOe7rNuPgbBtPCOzYyWDvKX7+FpxE5sRdvcPoui0=
+github.com/calvinmclean/mmmcp v0.0.0-20261009222932-e8ee401ffe82 h1:IauIGvrHb0/d+A8qUkdf4tz8F8Tc+a3ifBWZER2gh9E=
+github.com/calvinmclean/mmmcp v0.0.0-20261009222932-e8ee401ffe82/go.mod h1:EqKkPJHPGViqBHDPi3Htf0M1GZ7LLIboVbP2jFD5OjQ=
 github.com/cenkalti/backoff/v5 v5.0.3 h1:ZN+IMa753KfX5hd8vVaMixjnqRZ3y8CuJKRKj1xcsSM=
 github.com/cenkalti/backoff/v5 v5.0.3/go.mod h1:rkhZdG3JZukswDf7f0cwqPNk4K0sa+F97BxZthm/crw=
 github.com/cespare/xxhash/v2 v2.3.0 h1:UL815xU9SqsFlibzuggzjXhog7bL6oX9BbNZnL2UFvs=
@@ -542,8 +544,6 @@ github.com/obot-platform/cmd v0.0.0-20260707150346-5103d461ab67 h1:QGhIjCb7NuBsI
 github.com/obot-platform/cmd v0.0.0-20260707150346-5103d461ab67/go.mod h1:zj/4glDORtg3DKkLvTN2RUpm1gZnRU3dlbr3dZ4Pc2Q=
 github.com/obot-platform/kinm v0.0.0-20260903173654-2231aa14b6a7 h1:uPQHMLwWGSpPLPWeBsbTeNkA4sTolA4ze+42bRWK97I=
 github.com/obot-platform/kinm v0.0.0-20260903173654-2231aa14b6a7/go.mod h1:FgjOuhBrxR5ojLkAOd6nMJgf0LpmR+6i9UO4/3U/OlA=
-github.com/obot-platform/mmmcp v0.1.5-0.20261008181213-d26b89bf4874 h1:xAtUbendDccEyGxDyEMIFW08+0KAyIzcKQFRbuiE8Iw=
-github.com/obot-platform/mmmcp v0.1.5-0.20261008181213-d26b89bf4874/go.mod h1:EqKkPJHPGViqBHDPi3Htf0M1GZ7LLIboVbP2jFD5OjQ=
 github.com/obot-platform/nah v0.0.0-20261002170724-dceda7103076 h1:6yfTwf5XYYTFY1CCdUz+GkfsSc2t8NIEUSKZJWyu3NE=
 github.com/obot-platform/nah v0.0.0-20261002170724-dceda7103076/go.mod h1:XYTsRgyYAHyKS9yAy3j5LFdWGJM48EmneZ1otits+dU=
 github.com/onsi/ginkgo v1.6.0/go.mod h1:lLunBs/Ym6LB5Z9jYTR76FiuTmxDTDusOGeTQH+WWjE=

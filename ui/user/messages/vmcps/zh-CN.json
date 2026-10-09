@@ -336,6 +336,8 @@
 	"vmcps_tool_count_one": "{count} 个工具",
 	"vmcps_tool_count_other": "{count} 个工具",
 	"vmcps_tool_no_longer_available": "此工具已不再可用。",
+	"vmcps_tool_search": "工具搜索",
+	"vmcps_tool_search_description": "提供搜索和通用调用，而不是直接列出工具。",
 	"vmcps_tools": "工具",
 	"vmcps_tools_enabled": "已启用 {count} 个工具",
 	"vmcps_tools_enabled_approx": "已启用约 {count} 个工具",

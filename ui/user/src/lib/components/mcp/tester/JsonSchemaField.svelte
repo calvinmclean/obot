@@ -68,7 +68,7 @@
 			// Keep the parent form invalid until the JSON can be parsed again.
 			lastEmittedObjectValue = JSON.stringify(next);
 			onchange(next);
-			objectJSONError = error instanceof Error ? error.message : 'Invalid JSON';
+			objectJSONError = error instanceof Error ? error.message : m.mcps_tester_invalid_json();
 		}
 	}
 
@@ -138,7 +138,7 @@
 				oninput={(event) => updateObjectJSON(event.currentTarget.value)}></textarea>
 			{#if objectJSONError}
 				<p id={`${id}-error`} class="text-sm text-error" role="alert">
-					Invalid JSON: {objectJSONError}
+					{m.mcps_tester_invalid_json_error({ error: objectJSONError })}
 				</p>
 			{/if}
 		</div>

@@ -336,6 +336,8 @@
 	"vmcps_tool_count_one": "도구 {count}개",
 	"vmcps_tool_count_other": "도구 {count}개",
 	"vmcps_tool_no_longer_available": "이 도구는 더 이상 사용할 수 없습니다.",
+	"vmcps_tool_search": "도구 검색",
+	"vmcps_tool_search_description": "도구를 직접 나열하는 대신 검색 및 일반 호출을 제공합니다.",
 	"vmcps_tools": "도구",
 	"vmcps_tools_enabled": "도구 {count}개 활성화됨",
 	"vmcps_tools_enabled_approx": "도구 약 {count}개 활성화됨",

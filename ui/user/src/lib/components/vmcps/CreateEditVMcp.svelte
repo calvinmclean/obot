@@ -255,9 +255,9 @@
 			class="border-base-300 dark:border-base-400 mt-4 flex items-center justify-between gap-4 rounded-lg border p-4"
 		>
 			<span>
-				<span class="text-sm font-medium">Tool search</span>
+				<span class="text-sm font-medium">{m.vmcps_tool_search()}</span>
 				<span class="block text-xs opacity-70">
-					Expose search and generic invocation instead of listing tools directly.
+					{m.vmcps_tool_search_description()}
 				</span>
 			</span>
 			<input
@@ -266,7 +266,7 @@
 				class="toggle shrink-0"
 				bind:checked={form.toolSearch}
 				disabled={readonly}
-				aria-label="Tool search"
+				aria-label={m.vmcps_tool_search()}
 			/>
 		</label>
 
