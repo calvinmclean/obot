@@ -13,6 +13,7 @@
 		CHAT_COMPLETIONS_ONLY_REQUESTS,
 		CUSTOM_PROVIDER_BASES,
 		PROVIDER_CATALOG,
+		providerCatalogID,
 		catalogEntry,
 		setPath,
 		type ProviderCatalogEntry
@@ -69,7 +70,7 @@
 	let catalog = $derived(
 		PROVIDER_CATALOG.filter(
 			(p) =>
-				!configured.includes(p.id) &&
+				!configured.map(providerCatalogID).includes(p.id) &&
 				(!search ||
 					p.label.toLowerCase().includes(search.toLowerCase()) ||
 					p.id.includes(search.toLowerCase()))
@@ -90,7 +91,7 @@
 		!!providerID &&
 			(selected !== 'custom' ||
 				(/^[a-z0-9][a-z0-9_-]*$/.test(providerID) &&
-					!configured.includes(providerID) &&
+					!configured.map(providerCatalogID).includes(providerCatalogID(providerID)) &&
 					!!baseURL.trim())) &&
 			fields.every((f) => !('required' in f) || !f.required || !!values[f.path]?.trim())
 	);

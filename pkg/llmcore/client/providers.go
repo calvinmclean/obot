@@ -15,8 +15,15 @@ import (
 
 // Provider is one atomic configuration aggregate: provider settings and its keys.
 type Provider struct {
-	Config schemas.ProviderConfig
-	Keys   []schemas.Key
+	Config    schemas.ProviderConfig
+	Keys      []schemas.Key
+	Migration *ProviderMigration `json:"migration,omitempty"`
+}
+
+// ProviderMigration identifies the legacy source committed with an imported aggregate.
+type ProviderMigration struct {
+	Source   string `json:"source"`
+	Decision string `json:"decision"`
 }
 
 func (s *Client) GetProvider(ctx context.Context, name string) (Provider, error) {

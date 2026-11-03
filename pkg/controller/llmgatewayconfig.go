@@ -2,6 +2,9 @@ package controller
 
 import (
 	"context"
+	"errors"
+
+	"github.com/obot-platform/nah/pkg/router"
 
 	"github.com/obot-platform/obot/pkg/controller/handlers/llmgatewayconfig"
 	"github.com/obot-platform/obot/pkg/llmengine"
@@ -19,19 +22,31 @@ func (c *Controller) setupLLMGatewayConfigRoutes(engine llmgatewayconfig.Engine)
 	configSync := llmgatewayconfig.New(engine, func(ctx context.Context) error {
 		return llmengine.TriggerModelSync(ctx, c.services.StorageClient)
 	})
+	reconcile := func(req router.Request, resp router.Response) error {
+		if !engine.Ready() {
+			return configSync.Reconcile(req, resp)
+		}
+		// Apply successfully imported resources even when another import fails;
+		// join both errors so failed imports and runtime application remain retryable.
+		var importErr error
+		if c.services.GatewayClient != nil {
+			_, importErr = c.services.BifrostEngine.ImportLegacyModelProviders(req.Ctx, c.services.StorageClient, c.services.GatewayClient)
+		}
+		return errors.Join(importErr, configSync.Reconcile(req, resp))
+	}
 	c.services.EveryReplicaRouter.Type(&v1.LLMGatewayProvider{}).
 		Namespace(system.DefaultNamespace).
 		IncludeRemoved().
-		HandlerFunc(configSync.Reconcile)
+		HandlerFunc(reconcile)
 	c.services.EveryReplicaRouter.Type(&v1.LLMGatewayRoutingRule{}).
 		Namespace(system.DefaultNamespace).
 		IncludeRemoved().
-		HandlerFunc(configSync.Reconcile)
+		HandlerFunc(reconcile)
 	// Global settings use only the default singleton. Providers and rules have
 	// independent names, so their watches remain unfiltered.
 	c.services.EveryReplicaRouter.Type(&v1.LLMGatewayConfig{}).
 		Namespace(system.DefaultNamespace).
 		Name(system.LLMGatewayConfigName).
 		IncludeRemoved().
-		HandlerFunc(configSync.Reconcile)
+		HandlerFunc(reconcile)
 }

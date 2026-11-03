@@ -81,6 +81,9 @@ func (e *Engine) serveModels(w http.ResponseWriter, r *http.Request) {
 	if anthropic {
 		provider = schemas.Anthropic
 	}
+	if scope := LegacyProviderScope(r.Context()); scope != "" {
+		provider = schemas.ModelProvider(scope)
+	}
 	models, err := e.gatewayModels(r.Context(), provider)
 	if err != nil {
 		adminError(w, &APIError{StatusCode: 502, Message: err.Error()})
