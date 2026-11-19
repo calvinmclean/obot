@@ -113,3 +113,63 @@ func TestSyncedCatalogTunnelAssignment(t *testing.T) {
 	req, _ = catalogEntryRequest(t, storage, nil, http.MethodGet, path, nil, values)
 	require.ErrorContains(t, handler.GetTunnelAssignment(req), "tunnel assignment not found")
 }
+
+func TestVMCPUpgradeAdoptsCatalogTunnelAssignment(t *testing.T) {
+	const (
+		source = "https://example.com/catalog"
+		target = "https://example.com/mcp"
+	)
+	entry := vmcpCatalogEntryForTest("entry")
+	entry.Spec.Editable = false
+	entry.Spec.SourceURL = source
+	entry.Spec.Manifest.EntryKey = "inventory"
+	entry.Spec.Manifest.RemoteConfig = &types.RemoteCatalogConfig{FixedURL: target}
+	configuredTunnel := &v1.MCPTunnel{
+		Name:      "mt1office",
+		Namespace: system.DefaultNamespace,
+		Spec: v1.MCPTunnelSpec{Manifest: types.MCPTunnelManifest{
+			DisplayName: "Office",
+			AllowedURLs: []string{target},
+		}},
+	}
+	storage := newVMCPTestStorage(entry, configuredTunnel)
+	handler := vmcpHandlerForTest(t, storage)
+	admin := testUserWithRole("admin", types.GroupAdmin)
+	created := callVMCPCreate(t, storage, newHandlerTestGateway(t), handler, testVMCPManifest(), admin)
+	getComponent := func() types.VMCPComponent {
+		t.Helper()
+		var current v1.VMCP
+		require.NoError(t, storage.Get(t.Context(), kclient.ObjectKey{Namespace: system.DefaultNamespace, Name: created.ID}, &current))
+		require.Len(t, current.Spec.Manifest.Components, 1)
+		return current.Spec.Manifest.Components[0]
+	}
+	upgrade := func() error {
+		t.Helper()
+		req, _ := catalogEntryRequest(t, storage, nil, http.MethodPost, "/api/vmcps/"+created.ID+"/trigger-update", nil, map[string]string{"vmcp_id": created.ID})
+		return handler.TriggerUpdate(req)
+	}
+
+	original := getComponent()
+	entry.Spec.TunnelAssignment = &v1.CatalogEntryTunnelAssignment{
+		SourceURL:   source,
+		EntryKey:    "inventory",
+		TunnelName:  configuredTunnel.Name,
+		ExpectedURL: target,
+	}
+	require.NoError(t, storage.Update(t.Context(), entry))
+	require.Equal(t, original.SourceDigest, getComponent().SourceDigest)
+	require.NoError(t, upgrade())
+	adopted := getComponent()
+	require.Equal(t, configuredTunnel.Name, adopted.CatalogEntry.Manifest.RemoteConfig.TunnelName)
+	require.NotEqual(t, original.SourceDigest, adopted.SourceDigest)
+
+	entry.Spec.Manifest.RemoteConfig.FixedURL += "/changed"
+	require.NoError(t, storage.Update(t.Context(), entry))
+	require.ErrorContains(t, upgrade(), "expectedURL must match")
+	require.Equal(t, adopted.SourceDigest, getComponent().SourceDigest)
+
+	entry.Spec.TunnelAssignment = nil
+	require.NoError(t, storage.Update(t.Context(), entry))
+	require.NoError(t, upgrade())
+	require.Empty(t, getComponent().CatalogEntry.Manifest.RemoteConfig.TunnelName)
+}

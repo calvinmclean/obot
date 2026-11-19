@@ -5,6 +5,7 @@ import (
 
 	"github.com/obot-platform/nah/pkg/router"
 	"github.com/obot-platform/obot/apiclient/types"
+	"github.com/obot-platform/obot/pkg/mcpcatalog"
 	v1 "github.com/obot-platform/obot/pkg/storage/apis/obot.obot.ai/v1"
 	vmcpconfig "github.com/obot-platform/obot/pkg/vmcp"
 	"k8s.io/apimachinery/pkg/api/equality"
@@ -35,6 +36,7 @@ func DetectDrift(req router.Request, _ router.Response) error {
 		}
 		status.SourceMissing = false
 		status.NeedsUpdate = false
+		status.TunnelAssignmentError = ""
 		status.ConnectionSnapshot = nil
 		var entry v1.MCPServerCatalogEntry
 		if err := req.Get(&entry, vmcp.Namespace, component.MCPServerCatalogEntryID); apierrors.IsNotFound(err) {
@@ -42,8 +44,16 @@ func DetectDrift(req router.Request, _ router.Response) error {
 		} else if err != nil {
 			return fmt.Errorf("get VMCP component source %q: %w", component.MCPServerCatalogEntryID, err)
 		} else {
+			effective, err := mcpcatalog.EffectiveManifest(req.Ctx, req.Client, &entry, &entry)
+			if err != nil {
+				// The deployed snapshot can still be healthy while its source
+				// has a tunnel assignment that cannot be adopted.
+				status.TunnelAssignmentError = err.Error()
+				statuses = append(statuses, status)
+				continue
+			}
 			status.NeedsUpdate = vmcpconfig.NeedsUpdate(component, types.MCPServerCatalogEntrySnapshot{
-				Manifest:         entry.Spec.Manifest,
+				Manifest:         effective,
 				UnsupportedTools: entry.Spec.UnsupportedTools,
 			})
 			if !status.NeedsUpdate {

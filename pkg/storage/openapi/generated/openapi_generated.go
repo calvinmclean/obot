@@ -18706,6 +18706,12 @@ func schema_obot_platform_obot_apiclient_types_VMCPComponentStatus(ref common.Re
 							Format: "",
 						},
 					},
+					"tunnelAssignmentError": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
 					"connectionSnapshot": {
 						SchemaProps: spec.SchemaProps{
 							Description: "ConnectionSnapshot is an outdated snapshot that migrated connections retain when the component itself is current. Updating the vMCP releases it.",
@@ -28575,6 +28581,12 @@ func schema_storage_apis_obotobotai_v1_VMCPComponentStatus(ref common.ReferenceC
 					"needsUpdate": {
 						SchemaProps: spec.SchemaProps{
 							Type:   []string{"boolean"},
+							Format: "",
+						},
+					},
+					"tunnelAssignmentError": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
 							Format: "",
 						},
 					},

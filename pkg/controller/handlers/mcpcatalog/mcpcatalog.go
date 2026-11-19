@@ -189,11 +189,19 @@ func (h *Handler) Sync(req router.Request, resp router.Response) error {
 	for sourceURL, errMsg := range staticConfigurationErrors {
 		addSyncError(mcpCatalog.Status.SyncErrors, sourceURL, errMsg)
 	}
-	toAdd, retainedVMCPs, vmcpErrors, err := h.prepareCatalogVMCPs(req.Ctx, req.Client, mcpCatalog, toAdd, versionSkippedRefs)
+	routeErrors := make(map[string]string)
+	toAdd, retainedVMCPs, vmcpErrors, err := h.prepareCatalogVMCPs(req.Ctx, req.Client, mcpCatalog, toAdd, versionSkippedRefs, routeErrors)
 	if err != nil {
 		return err
 	}
 	for sourceURL, errMsg := range vmcpErrors {
+		addSyncError(mcpCatalog.Status.SyncErrors, sourceURL, errMsg)
+	}
+
+	// An invalid route keeps its affected vMCP in retainedVMCPs. The Git
+	// source is still complete, so unrelated removals can be reconciled.
+	incompleteSource := len(mcpCatalog.Status.SyncErrors) > 0
+	for sourceURL, errMsg := range routeErrors {
 		addSyncError(mcpCatalog.Status.SyncErrors, sourceURL, errMsg)
 	}
 
@@ -239,7 +247,7 @@ func (h *Handler) Sync(req router.Request, resp router.Response) error {
 	}
 
 	// Missing entries cannot be reconciled safely from a partial desired set.
-	if len(mcpCatalog.Status.SyncErrors) > 0 {
+	if incompleteSource {
 		slog.Info("Applying MCP catalog entries without reconciling missing entries due to source errors", "catalog", mcpCatalog.Name, "entries", len(toAdd), "sourceErrors", len(mcpCatalog.Status.SyncErrors))
 		return applyObjects()
 	}

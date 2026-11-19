@@ -16,6 +16,7 @@ import (
 	gatewaytypes "github.com/obot-platform/obot/pkg/gateway/types"
 	"github.com/obot-platform/obot/pkg/groupref"
 	"github.com/obot-platform/obot/pkg/mcp"
+	"github.com/obot-platform/obot/pkg/mcpcatalog"
 	v1 "github.com/obot-platform/obot/pkg/storage/apis/obot.obot.ai/v1"
 	"github.com/obot-platform/obot/pkg/system"
 	vmcpconfig "github.com/obot-platform/obot/pkg/vmcp"
@@ -530,9 +531,13 @@ func (h *VMCPHandler) loadComponentSnapshots(req api.Context, manifest *types.VM
 				component.Name = previous.Name
 			}
 		} else {
+			effective, err := mcpcatalog.EffectiveManifest(req.Context(), req.Storage, &entry, &entry)
+			if err != nil {
+				return types.NewErrBadRequest("component %q tunnel assignment: %v", entry.Name, err)
+			}
 			component.MCPCatalogID = entry.Spec.MCPCatalogName
 			component.CatalogEntry = types.MCPServerCatalogEntrySnapshot{
-				Manifest:         entry.Spec.Manifest,
+				Manifest:         effective,
 				UnsupportedTools: entry.Spec.UnsupportedTools,
 			}
 			component.SourceDigest = vmcpconfig.SourceDigest(component.CatalogEntry)
@@ -662,12 +667,13 @@ func convertVMCP(vmcp v1.VMCP) types.VMCP {
 	componentStatuses := make([]types.VMCPComponentStatus, 0, len(vmcp.Status.Components))
 	for _, status := range vmcp.Status.Components {
 		componentStatuses = append(componentStatuses, types.VMCPComponentStatus{
-			Name:               status.Name,
-			Ready:              status.Ready,
-			Error:              status.Error,
-			SourceMissing:      status.SourceMissing,
-			NeedsUpdate:        status.NeedsUpdate,
-			ConnectionSnapshot: status.ConnectionSnapshot,
+			Name:                  status.Name,
+			Ready:                 status.Ready,
+			Error:                 status.Error,
+			SourceMissing:         status.SourceMissing,
+			NeedsUpdate:           status.NeedsUpdate,
+			TunnelAssignmentError: status.TunnelAssignmentError,
+			ConnectionSnapshot:    status.ConnectionSnapshot,
 		})
 	}
 	return types.VMCP{

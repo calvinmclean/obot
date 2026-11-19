@@ -437,7 +437,7 @@ func TestCatalogSyncDoesNotOverwriteUnmanagedVMCP(t *testing.T) {
 		},
 	}
 
-	objects, _, syncErrors, err := (&Handler{}).prepareCatalogVMCPs(t.Context(), newCatalogFakeClient(existing), catalog, []kclient.Object{desired}, nil)
+	objects, _, syncErrors, err := (&Handler{}).prepareCatalogVMCPs(t.Context(), newCatalogFakeClient(existing), catalog, []kclient.Object{desired}, nil, nil)
 	require.NoError(t, err)
 	require.Empty(t, objects)
 	require.Contains(t, syncErrors["source"], "conflicts")

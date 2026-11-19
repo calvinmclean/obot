@@ -10,6 +10,7 @@ import (
 	gclient "github.com/obot-platform/obot/pkg/gateway/client"
 	gatewaytypes "github.com/obot-platform/obot/pkg/gateway/types"
 	"github.com/obot-platform/obot/pkg/mcp"
+	catalogconfig "github.com/obot-platform/obot/pkg/mcpcatalog"
 	v1 "github.com/obot-platform/obot/pkg/storage/apis/obot.obot.ai/v1"
 	"github.com/obot-platform/obot/pkg/utils"
 	vmcpconfig "github.com/obot-platform/obot/pkg/vmcp"
@@ -27,7 +28,7 @@ var (
 // versionSkippedRefs are unavailable on this Obot version, like the entry, and are left out
 // without reporting a sync error. An existing vMCP left out this way is returned in retained, so
 // that it is kept as it is rather than removed, with its servers and configuration.
-func (h *Handler) prepareCatalogVMCPs(ctx context.Context, c kclient.Client, catalog *v1.MCPCatalog, objs []kclient.Object, versionSkippedRefs map[string]struct{}) (desired []kclient.Object, retained map[string]struct{}, syncErrors map[string]string, err error) {
+func (h *Handler) prepareCatalogVMCPs(ctx context.Context, c kclient.Client, catalog *v1.MCPCatalog, objs []kclient.Object, versionSkippedRefs map[string]struct{}, routeErrors map[string]string) (desired []kclient.Object, retained map[string]struct{}, syncErrors map[string]string, err error) {
 	entries := make([]kclient.Object, 0, len(objs))
 	vmcps := make([]*v1.VMCP, 0)
 	entriesByRef := make(map[string]*v1.MCPServerCatalogEntry)
@@ -44,6 +45,20 @@ func (h *Handler) prepareCatalogVMCPs(ctx context.Context, c kclient.Client, cat
 	}
 	if len(vmcps) == 0 {
 		return objs, nil, nil, nil
+	}
+
+	// Keep assignments out of the desired Git entry objects. Only the vMCP
+	// snapshots receive the validated tunnel ID.
+	var savedEntries v1.MCPServerCatalogEntryList
+	if err := c.List(ctx, &savedEntries, kclient.InNamespace(catalog.Namespace), kclient.MatchingFields{"spec.mcpCatalogName": catalog.Name}); err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to list saved catalog entries: %w", err)
+	}
+	savedByName := make(map[string]*v1.MCPServerCatalogEntry)
+	for i := range savedEntries.Items {
+		entry := &savedEntries.Items[i]
+		if entry.Spec.TunnelAssignment != nil {
+			savedByName[entry.Name] = entry
+		}
 	}
 
 	var existingList v1.VMCPList
@@ -112,6 +127,15 @@ func (h *Handler) prepareCatalogVMCPs(ctx context.Context, c kclient.Client, cat
 			addSyncError(syncErrors, sourceURL, fmt.Sprintf("vMCP %q: %v", vmcp.Spec.Manifest.DisplayName, err))
 			continue
 		}
+		if err := applyComponentTunnelAssignments(ctx, c, vmcp, entriesByRef, savedByName); err != nil {
+			if existing != nil {
+				retained[existing.Name] = struct{}{}
+			}
+			if routeErrors != nil {
+				addSyncError(routeErrors, sourceURL, fmt.Sprintf("vMCP %q: %v", vmcp.Spec.Manifest.DisplayName, err))
+			}
+			continue
+		}
 		if err := vmcp.Spec.Manifest.Validate(); err != nil {
 			addSyncError(syncErrors, sourceURL, fmt.Sprintf("vMCP %q: %v", vmcp.Spec.Manifest.DisplayName, err))
 			continue
@@ -155,6 +179,25 @@ func (h *Handler) prepareCatalogVMCPs(ctx context.Context, c kclient.Client, cat
 		entries = append(entries, vmcp)
 	}
 	return entries, retained, syncErrors, nil
+}
+
+func applyComponentTunnelAssignments(ctx context.Context, client kclient.Client, vmcp *v1.VMCP, desired, saved map[string]*v1.MCPServerCatalogEntry) error {
+	for i := range vmcp.Spec.Manifest.Components {
+		component := &vmcp.Spec.Manifest.Components[i]
+		entryID := component.MCPServerCatalogEntryID
+		current := saved[entryID]
+		if current == nil {
+			continue
+		}
+		entry := desired[vmcp.Spec.ComponentCatalogReferences[component.ID]]
+		manifest, err := catalogconfig.EffectiveManifest(ctx, client, entry, current)
+		if err != nil {
+			return fmt.Errorf("component %q tunnel assignment: %w", component.Name, err)
+		}
+		component.CatalogEntry.Manifest = manifest
+		component.SourceDigest = vmcpconfig.SourceDigest(component.CatalogEntry)
+	}
+	return nil
 }
 
 // validateCatalogVMCPStaticConfiguration rejects required fixed configuration

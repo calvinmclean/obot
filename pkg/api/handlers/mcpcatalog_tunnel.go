@@ -7,10 +7,8 @@ import (
 
 	"github.com/obot-platform/obot/apiclient/types"
 	"github.com/obot-platform/obot/pkg/api"
-	"github.com/obot-platform/obot/pkg/mcp"
 	"github.com/obot-platform/obot/pkg/mcpcatalog"
 	v1 "github.com/obot-platform/obot/pkg/storage/apis/obot.obot.ai/v1"
-	"github.com/obot-platform/obot/pkg/tunnel"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/client-go/util/retry"
 	kclient "sigs.k8s.io/controller-runtime/pkg/client"
@@ -49,24 +47,6 @@ func tunnelAssignmentForRequest(req api.Context, entry *v1.MCPServerCatalogEntry
 	return assignment
 }
 
-func validateTunnelAssignment(req api.Context, entry *v1.MCPServerCatalogEntry, assignment catalogTunnelAssignmentRequest) error {
-	manifest := entry.Spec.Manifest
-	if manifest.Runtime != types.RuntimeRemote || manifest.RemoteConfig == nil || manifest.RemoteConfig.FixedURL == "" {
-		return fmt.Errorf("tunnel assignments require a synced remote entry with a literal fixed URL")
-	}
-	if assignment.ExpectedURL != manifest.RemoteConfig.FixedURL {
-		return fmt.Errorf("expectedURL must match the current Git catalog entry fixedURL")
-	}
-	// Apply the existing tunneled URL checks without changing the Git manifest.
-	remote := *manifest.RemoteConfig
-	remote.TunnelName = assignment.TunnelName
-	manifest.RemoteConfig = &remote
-	if err := (mcp.RemoteValidator{}).ValidateCatalogConfig(req.Context(), manifest); err != nil {
-		return err
-	}
-	return tunnel.ValidateReference(req.Context(), req.Storage, assignment.TunnelName, assignment.ExpectedURL)
-}
-
 func (*MCPCatalogHandler) GetTunnelAssignment(req api.Context) error {
 	entry, err := resolveTunnelAssignmentEntry(req)
 	if err != nil {
@@ -86,7 +66,7 @@ func (*MCPCatalogHandler) GetTunnelAssignment(req api.Context) error {
 	if entry.Spec.Manifest.RemoteConfig != nil {
 		response.CurrentURL = entry.Spec.Manifest.RemoteConfig.FixedURL
 	}
-	if err := validateTunnelAssignment(req, entry, response.catalogTunnelAssignmentRequest); err != nil {
+	if _, err := mcpcatalog.ManifestWithTunnel(req.Context(), req.Storage, entry.Spec.Manifest, assignment.TunnelName, assignment.ExpectedURL); err != nil {
 		response.Valid = false
 		response.Reason = err.Error()
 	}
@@ -106,7 +86,7 @@ func (*MCPCatalogHandler) PutTunnelAssignment(req api.Context) error {
 		if err != nil {
 			return err
 		}
-		if err := validateTunnelAssignment(req, entry, input); err != nil {
+		if _, err := mcpcatalog.ManifestWithTunnel(req.Context(), req.Storage, entry.Spec.Manifest, input.TunnelName, input.ExpectedURL); err != nil {
 			return types.NewErrBadRequest("invalid tunnel assignment: %v", err)
 		}
 		assignment := v1.CatalogEntryTunnelAssignment{
