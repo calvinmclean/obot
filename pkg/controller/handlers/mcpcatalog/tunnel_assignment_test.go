@@ -8,6 +8,7 @@ import (
 
 	"github.com/obot-platform/nah/pkg/router"
 	"github.com/obot-platform/obot/apiclient/types"
+	"github.com/obot-platform/obot/pkg/mcp"
 	v1 "github.com/obot-platform/obot/pkg/storage/apis/obot.obot.ai/v1"
 	"github.com/stretchr/testify/require"
 	kclient "sigs.k8s.io/controller-runtime/pkg/client"
@@ -86,14 +87,14 @@ func TestCatalogSyncAdoptsTunnelAssignment(t *testing.T) {
 	dir := t.TempDir()
 	catalog := testCatalog()
 	catalog.Spec.SourceURLs = []string{dir}
-	const target = "https://1.1.1.1/mcp"
-	const changedTarget = "https://1.1.1.1/new/mcp"
+	const target = "http://127.0.0.1:8080/mcp"
+	const changedTarget = "http://127.0.0.1:8080/new/mcp"
 	office := &v1.MCPTunnel{
 		Name:      "mt1office",
 		Namespace: catalog.Namespace,
 		Spec: v1.MCPTunnelSpec{Manifest: types.MCPTunnelManifest{
 			DisplayName: "Office",
-			AllowedURLs: []string{"https://1.1.1.1/*"},
+			AllowedURLs: []string{"http://127.0.0.1:8080/*"},
 		}},
 	}
 	other := office.DeepCopy()
@@ -107,7 +108,7 @@ func TestCatalogSyncAdoptsTunnelAssignment(t *testing.T) {
 	writeEntry := func(url string) {
 		t.Helper()
 		require.NoError(t, os.WriteFile(entryFile, []byte(
-			"entryKey: inventory\nname: Inventory\nshortDescription: Inventory\nruntime: remote\nremoteConfig:\n  fixedURL: "+url+"\n",
+			"entryKey: inventory\nname: Inventory\nshortDescription: Inventory\nruntime: remote\nminObotVersion: "+mcp.TunnelRequiredMinObotVersion+"\nremoteConfig:\n  tunnelRequired: true\n  fixedURL: "+url+"\n",
 		), 0o600))
 	}
 	writeVMCP := func(path, key, name string) {
@@ -163,11 +164,25 @@ func TestCatalogSyncAdoptsTunnelAssignment(t *testing.T) {
 	sync()
 	original := component()
 	require.Empty(t, original.CatalogEntry.Manifest.RemoteConfig.TunnelName)
+	require.True(t, original.CatalogEntry.Manifest.RemoteConfig.TunnelRequired)
+	runtimeConfig := func(component types.VMCPComponent) (mcp.ServerConfig, error) {
+		t.Helper()
+		manifest, err := types.MapCatalogEntryToServer(component.CatalogEntry.Manifest, "", true)
+		require.NoError(t, err)
+		server := v1.MCPServer{Spec: v1.MCPServerSpec{Manifest: manifest}}
+		config, _, err := mcp.ServerToServerConfig(server, nil, "", "", "", nil, false)
+		return config, err
+	}
+	_, err := runtimeConfig(original)
+	require.ErrorContains(t, err, "MCP tunnel assignment required")
 
 	save(office.Name, target)
 	sync()
 	assigned := component()
 	require.Equal(t, office.Name, assigned.CatalogEntry.Manifest.RemoteConfig.TunnelName)
+	config, err := runtimeConfig(assigned)
+	require.NoError(t, err)
+	require.Equal(t, office.Name, config.TunnelName)
 	require.NotEqual(t, original.SourceDigest, assigned.SourceDigest)
 	require.Empty(t, entry().Spec.Manifest.RemoteConfig.TunnelName)
 
@@ -193,4 +208,6 @@ func TestCatalogSyncAdoptsTunnelAssignment(t *testing.T) {
 	save("", "")
 	sync()
 	require.Empty(t, component().CatalogEntry.Manifest.RemoteConfig.TunnelName)
+	_, err = runtimeConfig(component())
+	require.ErrorContains(t, err, "MCP tunnel assignment required")
 }

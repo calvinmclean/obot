@@ -14586,11 +14586,17 @@ func schema_obot_platform_obot_apiclient_types_RemoteCatalogConfig(ref common.Re
 							Format:      "",
 						},
 					},
-					"urlTemplate": {
+					"tunnelRequired": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Optional: MCPTunnel used to reach the remote MCP server",
-							Type:        []string{"string"},
+							Type:        []string{"boolean"},
 							Format:      "",
+						},
+					},
+					"urlTemplate": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
 						},
 					},
 					"hostname": {
@@ -14646,12 +14652,18 @@ func schema_obot_platform_obot_apiclient_types_RemoteRuntimeConfig(ref common.Re
 							Format:      "",
 						},
 					},
-					"isTemplate": {
+					"tunnelRequired": {
 						SchemaProps: spec.SchemaProps{
 							Description: "Optional: MCPTunnel used to reach the remote MCP server",
-							Default:     false,
 							Type:        []string{"boolean"},
 							Format:      "",
+						},
+					},
+					"isTemplate": {
+						SchemaProps: spec.SchemaProps{
+							Default: false,
+							Type:    []string{"boolean"},
+							Format:  "",
 						},
 					},
 					"urlTemplate": {

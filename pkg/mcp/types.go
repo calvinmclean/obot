@@ -562,6 +562,12 @@ func configureRemoteRuntime(serverConfig *ServerConfig, remoteConfig *types.Remo
 		return nil, fmt.Errorf("remote runtime requires remote config")
 	}
 
+	// This conversion is shared by MCP requests, tool previews, and OAuth
+	// discovery. Stop before a direct transport can be constructed.
+	if err := ValidateRequiredTunnel(remoteConfig.TunnelRequired, remoteConfig.TunnelName); err != nil {
+		return nil, err
+	}
+
 	serverConfig.URL = remoteConfig.URL
 	serverConfig.LocalhostCallbackEnabled = remoteConfig.LocalhostCallbackEnabled
 	serverConfig.LocalhostCallbackPath = remoteConfig.LocalhostCallbackPath

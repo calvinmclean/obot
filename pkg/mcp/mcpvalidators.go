@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/url"
@@ -12,12 +13,16 @@ import (
 
 	"github.com/obot-platform/obot/apiclient/types"
 	"github.com/obot-platform/obot/pkg/version"
+	"golang.org/x/mod/semver"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 const (
 	// maxShortDescriptionLength is the max length of a catalog entry shortDescription.
 	maxShortDescriptionLength = 160
+
+	// TunnelRequiredMinObotVersion is the first release that enforces required tunnel routing.
+	TunnelRequiredMinObotVersion = "v0.30.0"
 )
 
 var (
@@ -508,7 +513,18 @@ func (v RemoteValidator) ValidateSystemConfig(ctx context.Context, manifest type
 	return v.validateRemoteConfig(ctx, *manifest.RemoteConfig)
 }
 
+// ValidateRequiredTunnel blocks a required remote route from falling back to direct access.
+func ValidateRequiredTunnel(required bool, tunnelName string) error {
+	if required && strings.TrimSpace(tunnelName) == "" {
+		return errors.New("MCP tunnel assignment required")
+	}
+	return nil
+}
+
 func (v RemoteValidator) validateRemoteConfig(ctx context.Context, config types.RemoteRuntimeConfig) error {
+	if err := ValidateRequiredTunnel(config.TunnelRequired, config.TunnelName); err != nil {
+		return err
+	}
 	if err := ValidateLocalhostCallbackPath(config.LocalhostCallbackPath); err != nil {
 		return err
 	}
@@ -567,6 +583,13 @@ func (v RemoteValidator) validateRemoteCatalogConfig(ctx context.Context, config
 	hasURLTemplate := strings.TrimSpace(config.URLTemplate) != ""
 	hasTunnel := strings.TrimSpace(config.TunnelName) != ""
 
+	if config.TunnelRequired && (!hasFixedURL || hasHostname || hasURLTemplate || len(extractEnvRefs(config.FixedURL)) > 0) {
+		return types.RuntimeValidationError{
+			Runtime: types.RuntimeRemote,
+			Field:   "remoteConfig.tunnelRequired",
+			Message: "requires a literal fixedURL",
+		}
+	}
 	if hasTunnel && hasURLTemplate {
 		return types.RuntimeValidationError{
 			Runtime: types.RuntimeRemote,
@@ -615,7 +638,7 @@ func (v RemoteValidator) validateRemoteCatalogConfig(ctx context.Context, config
 		if err := validateRemoteURLFormat("fixedURL", config.FixedURL); err != nil {
 			return err
 		}
-		if err := v.validateRemoteMCPURL(ctx, "fixedURL", config.FixedURL, hasTunnel); err != nil {
+		if err := v.validateRemoteMCPURL(ctx, "fixedURL", config.FixedURL, hasTunnel || config.TunnelRequired); err != nil {
 			return err
 		}
 	}
@@ -863,6 +886,15 @@ func ValidateCatalogEntryManifest(ctx context.Context, manifest types.MCPServerC
 		return err
 	}
 
+	if manifest.RemoteConfig != nil && manifest.RemoteConfig.TunnelRequired {
+		if !gitManaged || manifest.Runtime != types.RuntimeRemote || manifest.EntryKey == "" {
+			return fmt.Errorf("remoteConfig.tunnelRequired requires a Git-synced remote entry with an explicit entryKey")
+		}
+		if semver.Compare(strings.TrimSpace(manifest.MinObotVersion), TunnelRequiredMinObotVersion) < 0 {
+			return fmt.Errorf("remoteConfig.tunnelRequired requires minObotVersion of %s or later", TunnelRequiredMinObotVersion)
+		}
+	}
+
 	if gitManaged {
 		if err := validateGitManagedCatalogEntryManifest(manifest); err != nil {
 			return err
@@ -903,6 +935,10 @@ func validateCatalogSyncedTunnelName(manifest types.MCPServerCatalogEntryManifes
 func ValidateSystemMCPServerCatalogEntryManifest(ctx context.Context, manifest types.SystemMCPServerCatalogEntryManifest, options ValidationOptions) error {
 	if err := ValidateObotVersionRange(manifest.MinObotVersion, manifest.MaxObotVersion, true); err != nil {
 		return err
+	}
+
+	if manifest.RemoteConfig != nil && manifest.RemoteConfig.TunnelRequired {
+		return fmt.Errorf("remoteConfig.tunnelRequired is not supported for system MCP servers")
 	}
 
 	if manifest.RemoteConfig != nil && manifest.RemoteConfig.TunnelName != "" {
@@ -1005,6 +1041,10 @@ func ValidateSystemMCPServerManifest(ctx context.Context, manifest types.SystemM
 	if err := validateConfigurationOptions(manifest.Config); err != nil {
 		return err
 	}
+	if manifest.RemoteConfig != nil && manifest.RemoteConfig.TunnelRequired {
+		return fmt.Errorf("remoteConfig.tunnelRequired is not supported for system MCP servers")
+	}
+
 	if manifest.RemoteConfig != nil && manifest.RemoteConfig.TunnelName != "" {
 		return types.RuntimeValidationError{
 			Runtime: manifest.Runtime,

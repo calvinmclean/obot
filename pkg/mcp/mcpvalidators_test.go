@@ -2015,3 +2015,45 @@ func TestValidateObotVersionRange(t *testing.T) {
 		})
 	}
 }
+
+func TestGitCatalogTunnelRequired(t *testing.T) {
+	manifest := types.MCPServerCatalogEntryManifest{
+		EntryKey:       "inventory",
+		Name:           "Inventory",
+		Runtime:        types.RuntimeRemote,
+		MinObotVersion: TunnelRequiredMinObotVersion,
+		RemoteConfig: &types.RemoteCatalogConfig{
+			FixedURL:       "http://127.0.0.1:8080/mcp",
+			TunnelRequired: true,
+		},
+	}
+	validate := func(gitManaged bool) error {
+		return ValidateCatalogEntryManifest(t.Context(), manifest, gitManaged, ValidationOptions{})
+	}
+	require.NoError(t, validate(true))
+
+	manifest.RemoteConfig.TunnelRequired = false
+	require.Error(t, validate(true))
+	manifest.RemoteConfig.TunnelRequired = true
+
+	manifest.MinObotVersion = ""
+	require.ErrorContains(t, validate(true), "requires minObotVersion")
+	require.ErrorContains(t, validate(false), "requires a Git-synced remote entry")
+	manifest.MinObotVersion = "v0.29.0"
+	require.ErrorContains(t, validate(true), "requires minObotVersion")
+	manifest.MinObotVersion = TunnelRequiredMinObotVersion
+
+	manifest.EntryKey = ""
+	require.ErrorContains(t, validate(true), "explicit entryKey")
+	manifest.EntryKey = "inventory"
+
+	manifest.RemoteConfig.FixedURL = "http://127.0.0.1:8080/${PATH}"
+	require.ErrorContains(t, validate(true), "requires a literal fixedURL")
+
+	manifest.RemoteConfig.FixedURL = "http://user@127.0.0.1:8080/mcp"
+	require.ErrorContains(t, validate(true), "must not include user information")
+	manifest.RemoteConfig.FixedURL = "http://127.0.0.1:8080/mcp"
+
+	manifest.RemoteConfig.TunnelName = "mt1office"
+	require.ErrorContains(t, validate(true), "cannot be set on catalog-synced entries")
+}

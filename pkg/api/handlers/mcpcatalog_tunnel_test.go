@@ -173,3 +173,37 @@ func TestVMCPUpgradeAdoptsCatalogTunnelAssignment(t *testing.T) {
 	require.NoError(t, upgrade())
 	require.Empty(t, getComponent().CatalogEntry.Manifest.RemoteConfig.TunnelName)
 }
+
+func TestCatalogPreviewsBlockUnassignedRequiredTunnel(t *testing.T) {
+	catalog := &v1.MCPCatalog{
+		Name:      "catalog",
+		Namespace: system.DefaultNamespace,
+	}
+	entry := &v1.MCPServerCatalogEntry{
+		Name:      "inventory",
+		Namespace: system.DefaultNamespace,
+		Spec: v1.MCPServerCatalogEntrySpec{
+			MCPCatalogName: catalog.Name,
+			SourceURL:      "https://example.com/catalog",
+			Manifest: types.MCPServerCatalogEntryManifest{
+				EntryKey: "inventory",
+				Runtime:  types.RuntimeRemote,
+				RemoteConfig: &types.RemoteCatalogConfig{
+					FixedURL:       "http://127.0.0.1:8080/mcp",
+					TunnelRequired: true,
+				},
+			},
+		},
+	}
+	storage := newFakeStorage(t, catalog, entry)
+	// No OAuth checker or session manager is installed. The handlers must
+	// return before attempting discovery or opening a preview connection.
+	handler := &MCPCatalogHandler{}
+	values := map[string]string{"catalog_id": catalog.Name, "entry_id": entry.Name}
+	path := "/api/mcp-catalogs/catalog/entries/inventory/generate-tool-previews"
+	req, _ := catalogEntryRequest(t, storage, nil, http.MethodPost, path+"?dryRun=true", map[string]string{}, values)
+	require.ErrorContains(t, handler.GenerateToolPreviews(req), "MCP tunnel assignment required")
+
+	req, _ = catalogEntryRequest(t, storage, nil, http.MethodPost, path+"/oauth-url?dryRun=true", map[string]string{}, values)
+	require.ErrorContains(t, handler.GenerateToolPreviewsOAuthURL(req), "MCP tunnel assignment required")
+}

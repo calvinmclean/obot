@@ -139,9 +139,30 @@ func TestHTTPClientRoutesOAuthDiscoveryThroughTunnel(t *testing.T) {
 	}()
 	waitForOAuthTunnelConnection(t, manager, tunnelName)
 
+	manifest, err := types.MapCatalogEntryToServer(types.MCPServerCatalogEntryManifest{
+		Runtime: types.RuntimeRemote,
+		RemoteConfig: &types.RemoteCatalogConfig{
+			FixedURL:       targetBaseURL + "/mcp",
+			TunnelRequired: true,
+		},
+	}, "", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	component := v1.MCPServer{Spec: v1.MCPServerSpec{Manifest: manifest}}
+	_, _, err = ServerToServerConfig(component, nil, "", "", "", nil, false)
+	if err == nil || err.Error() != "MCP tunnel assignment required" {
+		t.Fatalf("unassigned route produced unexpected error: %v", err)
+	}
+	component.Spec.Manifest.RemoteConfig.TunnelName = tunnelName
+	config, _, err := ServerToServerConfig(component, nil, "", "", "", nil, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	metadata, err := (&SessionManager{tunnelManager: manager}).GetOAuthMetadata(
 		t.Context(),
-		ServerConfig{TunnelName: tunnelName, URL: targetBaseURL + "/mcp"},
+		config,
 		"Obot Test MCP OAuth Client",
 		"https://obot.example.com/oauth/mcp/callback",
 		false,

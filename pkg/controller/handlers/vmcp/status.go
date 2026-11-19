@@ -12,6 +12,7 @@ import (
 	"github.com/obot-platform/obot/apiclient/types"
 	gateway "github.com/obot-platform/obot/pkg/gateway/client"
 	gatewaytypes "github.com/obot-platform/obot/pkg/gateway/types"
+	"github.com/obot-platform/obot/pkg/mcp"
 	v1 "github.com/obot-platform/obot/pkg/storage/apis/obot.obot.ai/v1"
 	"github.com/obot-platform/obot/pkg/system"
 	"github.com/obot-platform/obot/pkg/utils"
@@ -67,6 +68,11 @@ func (h *Handler) SyncStatus(req router.Request, _ router.Response) error {
 			status.ConfigurationCheckHash = checkHash
 		}
 		status.Ready, status.Error = true, status.ConfigurationError
+		if remote := component.CatalogEntry.Manifest.RemoteConfig; status.Error == "" && remote != nil {
+			if err := mcp.ValidateRequiredTunnel(remote.TunnelRequired, remote.TunnelName); err != nil {
+				status.Error = err.Error()
+			}
+		}
 		if ref := vmcpconfig.ComponentOAuthCredentialReference(component); status.Error == "" && ref != "" {
 			checkHash, err := vmcpconfig.OAuthCredentialCheckHash(req, vmcp.Namespace, ref, component.MCPServerCatalogEntryID)
 			if err != nil {

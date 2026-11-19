@@ -933,6 +933,11 @@ func (h *MCPCatalogHandler) GenerateToolPreviews(req api.Context) error {
 	if catalogName == "" {
 		catalogName = entry.Spec.PowerUserWorkspaceID
 	}
+	effectiveManifest, err := mcpcatalog.EffectiveManifest(req.Context(), req.Storage, &entry, &entry)
+	if err != nil {
+		return types.NewErrBadRequest("invalid tunnel assignment: %v", err)
+	}
+
 	validationOptions, err := ValidationOptionsWithResourceMaximums(req, h.sessionManager)
 	if err != nil {
 		return err
@@ -947,7 +952,7 @@ func (h *MCPCatalogHandler) GenerateToolPreviews(req api.Context) error {
 		req.User.GetUID(),
 		entry.Name,
 		catalogName,
-		entry.Spec.Manifest,
+		effectiveManifest,
 		configRequest.Config,
 		configRequest.URL,
 		h.serverURL,
@@ -1058,11 +1063,16 @@ func (h *MCPCatalogHandler) GenerateToolPreviewsOAuthURL(req api.Context) error 
 	if catalogName == "" {
 		catalogName = entry.Spec.PowerUserWorkspaceID
 	}
+	effectiveManifest, err := mcpcatalog.EffectiveManifest(req.Context(), req.Storage, &entry, &entry)
+	if err != nil {
+		return types.NewErrBadRequest("invalid tunnel assignment: %v", err)
+	}
+
 	validationOptions, err := ValidationOptionsWithResourceMaximums(req, h.sessionManager)
 	if err != nil {
 		return err
 	}
-	server, serverConfig, err := tempServerAndConfig(req.Context(), req.Storage, req.LocalK8sClient, req.GatewayClient, req.ObotNamespace, h.secretBindingAllowedLabel, req.User.GetUID(), entry.Name, catalogName, entry.Spec.Manifest, configRequest.Config, configRequest.URL, h.serverURL, validationOptions)
+	server, serverConfig, err := tempServerAndConfig(req.Context(), req.Storage, req.LocalK8sClient, req.GatewayClient, req.ObotNamespace, h.secretBindingAllowedLabel, req.User.GetUID(), entry.Name, catalogName, effectiveManifest, configRequest.Config, configRequest.URL, h.serverURL, validationOptions)
 	if err != nil {
 		return types.NewErrBadRequest("failed to create temporary server and config: %v", err)
 	}

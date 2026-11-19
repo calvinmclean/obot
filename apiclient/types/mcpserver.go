@@ -70,8 +70,9 @@ type ContainerizedRuntimeConfig struct {
 type RemoteRuntimeConfig struct {
 	LocalhostCallbackEnabled bool   `json:"localhostCallbackEnabled,omitempty"`
 	LocalhostCallbackPath    string `json:"localhostCallbackPath,omitempty"`
-	URL                      string `json:"url"`                   // Required: Full URL to remote MCP server
-	TunnelName               string `json:"tunnelName,omitempty"`  // Optional: MCPTunnel used to reach the remote MCP server
+	URL                      string `json:"url"`                  // Required: Full URL to remote MCP server
+	TunnelName               string `json:"tunnelName,omitempty"` // Optional: MCPTunnel used to reach the remote MCP server
+	TunnelRequired           bool   `json:"tunnelRequired,omitempty"`
 	IsTemplate               bool   `json:"isTemplate"`            // Optional: Whether the URL is a template
 	URLTemplate              string `json:"urlTemplate,omitempty"` // URL template for user URLs
 	Hostname                 string `json:"hostname,omitempty"`    // Optional: Hostname constraint the URL conforms to
@@ -84,8 +85,9 @@ type RemoteRuntimeConfig struct {
 type RemoteCatalogConfig struct {
 	LocalhostCallbackEnabled bool   `json:"localhostCallbackEnabled,omitempty"`
 	LocalhostCallbackPath    string `json:"localhostCallbackPath,omitempty"`
-	FixedURL                 string `json:"fixedURL,omitempty"`            // Fixed URL for all instances
-	TunnelName               string `json:"tunnelName,omitempty"`          // Optional: MCPTunnel used to reach the remote MCP server
+	FixedURL                 string `json:"fixedURL,omitempty"`   // Fixed URL for all instances
+	TunnelName               string `json:"tunnelName,omitempty"` // Optional: MCPTunnel used to reach the remote MCP server
+	TunnelRequired           bool   `json:"tunnelRequired,omitempty"`
 	URLTemplate              string `json:"urlTemplate,omitempty"`         // URL template for user URLs
 	Hostname                 string `json:"hostname,omitempty"`            // Required hostname for user URLs
 	StaticOAuthRequired      bool   `json:"staticOAuthRequired,omitempty"` // Indicates static OAuth configuration is required
@@ -685,6 +687,7 @@ func (m MCPServerManifest) ConvertToCatalogEntry() MCPServerCatalogEntryManifest
 			catalogManifest.RemoteConfig = &RemoteCatalogConfig{
 				FixedURL:                 m.RemoteConfig.URL,
 				TunnelName:               m.RemoteConfig.TunnelName,
+				TunnelRequired:           m.RemoteConfig.TunnelRequired,
 				URLTemplate:              m.RemoteConfig.URLTemplate,
 				Hostname:                 m.RemoteConfig.Hostname,
 				StaticOAuthRequired:      m.RemoteConfig.StaticOAuthRequired,
@@ -798,7 +801,8 @@ func MapCatalogEntryToServer(catalogEntry MCPServerCatalogEntryManifest, userURL
 		}
 
 		remoteConfig := &RemoteRuntimeConfig{
-			TunnelName: catalogEntry.RemoteConfig.TunnelName,
+			TunnelName:     catalogEntry.RemoteConfig.TunnelName,
+			TunnelRequired: catalogEntry.RemoteConfig.TunnelRequired,
 		}
 
 		switch {
