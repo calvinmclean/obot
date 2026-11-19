@@ -951,12 +951,15 @@ func New(ctx context.Context, config Config) (*Services, error) {
 		billingProvider     *billing.Provider
 		entitlementProvider client.EntitlementProvider = licenseProvider
 		restriction         authn.Restriction
+		computeAdmit        func(context.Context, kclient.Object, func() error) error
 	)
 	if config.BillingKey != "" {
 		billingProvider = billing.NewProvider(billing.NewClient(config.BillingURL, config.BillingKey), r.Backend(), storageClient)
 		entitlementProvider, restriction = billingProvider, billingProvider
-		storageServices.Admission.Set(mcp.NewComputeAdmitter(storageClient, billingProvider, gatewayClient.WithComputeLock))
+		computeAdmit = mcp.NewComputeAdmitter(storageClient, billingProvider, gatewayClient.WithComputeLock).Admit
 	}
+
+	storageServices.Admission.Set(tunnel.NewReferenceAdmitter(storageClient, gatewayClient.WithTunnelPolicyLock, computeAdmit))
 
 	providerDispatcher := dispatcher.New(mcpSessionManager, storageClient, gatewayClient, licenseProvider, config.Hostname, system.LocalServerURL(config.HTTPListenPort), postgresDSN)
 

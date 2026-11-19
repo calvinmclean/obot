@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/obot-platform/obot/apiclient/types"
 	"github.com/obot-platform/obot/pkg/api"
@@ -18,6 +19,8 @@ import (
 	storagescheme "github.com/obot-platform/obot/pkg/storage/scheme"
 	"github.com/obot-platform/obot/pkg/system"
 	tunnelpkg "github.com/obot-platform/obot/pkg/tunnel"
+	"github.com/obot-platform/obot/pkg/utils"
+	"github.com/stretchr/testify/require"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	kclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -432,6 +435,9 @@ func newMCPTunnelTestStorage(objects ...kclient.Object) *mcpTunnelTestStorage {
 		WithWatch: fake.NewClientBuilder().
 			WithScheme(storagescheme.Scheme).
 			WithObjects(objects...).
+			WithIndex(&v1.VMCPInstance{}, "spec.manifest.vmcpID", func(object kclient.Object) []string {
+				return []string{object.(*v1.VMCPInstance).Spec.Manifest.VMCPID}
+			}).
 			WithIndex(&v1.MCPServerCatalogEntry{}, "spec.manifest.runtime", mcpServerCatalogEntryIndex("spec.manifest.runtime")).
 			WithIndex(&v1.MCPServerCatalogEntry{}, "spec.manifest.remoteConfig.tunnelName", mcpServerCatalogEntryIndex("spec.manifest.remoteConfig.tunnelName")).
 			Build(),
@@ -534,4 +540,166 @@ func assertMCPTunnelPreview(t *testing.T, preview string, fullToken []byte) {
 	if !bytes.Equal(raw, fullToken[:16]) {
 		t.Fatal("preview does not match the first 16 token bytes")
 	}
+}
+
+func TestTunnelRetirementReportsSavedAndDeployedReferences(t *testing.T) {
+	const (
+		tunnelName = "mt1office"
+		target     = "https://inventory.internal/mcp"
+	)
+	tunnel := &v1.MCPTunnel{
+		Name:      tunnelName,
+		Namespace: system.DefaultNamespace,
+	}
+	saved := &v1.MCPServerCatalogEntry{
+		Name:      "inventory",
+		Namespace: system.DefaultNamespace,
+		Spec: v1.MCPServerCatalogEntrySpec{
+			SourceURL: "https://example.com/catalog",
+			Manifest:  types.MCPServerCatalogEntryManifest{EntryKey: "inventory"},
+			TunnelAssignment: &v1.CatalogEntryTunnelAssignment{
+				SourceURL:   "https://example.com/catalog",
+				EntryKey:    "inventory",
+				TunnelName:  tunnelName,
+				ExpectedURL: target,
+			},
+		},
+	}
+	component := types.VMCPComponent{
+		ID:                      "inventory",
+		MCPServerCatalogEntryID: "removed-entry",
+	}
+	definition := &v1.VMCP{
+		Name:      "bundle",
+		Namespace: system.DefaultNamespace,
+		Spec: v1.VMCPSpec{Manifest: types.VMCPManifest{
+			Components: []types.VMCPComponent{component},
+		}},
+	}
+	snapshot := types.MCPServerCatalogEntrySnapshot{Manifest: types.MCPServerCatalogEntryManifest{
+		Runtime:      types.RuntimeRemote,
+		RemoteConfig: &types.RemoteCatalogConfig{FixedURL: target, TunnelName: tunnelName},
+	}}
+	legacy := component
+	legacy.CatalogEntry = snapshot
+	legacy.SourceDigest = utils.Digest([]any{component, ""})
+	instance := &v1.VMCPInstance{
+		Name:      "connection",
+		Namespace: system.DefaultNamespace,
+		Spec: v1.VMCPInstanceSpec{
+			Manifest:         types.VMCPInstanceManifest{VMCPID: definition.Name},
+			LegacyComponents: []types.VMCPComponent{legacy},
+		},
+	}
+	second := component
+	second.ID = "warehouse"
+	second.CatalogEntry = snapshot
+	definition.Spec.Manifest.Components = append(definition.Spec.Manifest.Components, second)
+
+	backing := &v1.MCPServer{
+		Name:      "inventory-backing",
+		Namespace: system.DefaultNamespace,
+		Spec: v1.MCPServerSpec{Manifest: types.MCPServerManifest{
+			Runtime:      types.RuntimeRemote,
+			RemoteConfig: &types.RemoteRuntimeConfig{URL: target, TunnelName: tunnelName},
+		}},
+	}
+	storage := newMCPTunnelTestStorage(tunnel, saved, definition, instance, backing)
+	handler := NewMCPTunnelHandler(nil)
+	path := "/api/mcp-tunnels/" + tunnelName
+	deleteTunnel := func() error {
+		req, _ := catalogEntryRequest(t, storage, nil, http.MethodDelete, path, nil, map[string]string{"id": tunnelName})
+		return handler.Delete(req)
+	}
+
+	_, _, err := callMCPTunnelHandler(t, storage, http.MethodPut, path, tunnelName,
+		`{"displayName":"Office","allowedURLs":["https://other.internal/*"]}`, handler.Update)
+	for _, want := range []string{"catalog entry inventory saved assignment", "vMCP bundle component warehouse", "vMCP connection connection component inventory", "MCP server inventory-backing"} {
+		require.ErrorContains(t, err, want)
+		require.ErrorContains(t, deleteTunnel(), want)
+	}
+
+	require.NoError(t, storage.Delete(t.Context(), saved))
+	definition.Spec.Manifest.Components = []types.VMCPComponent{component}
+	require.NoError(t, storage.Update(t.Context(), definition))
+	require.ErrorContains(t, deleteTunnel(), "vMCP connection connection component inventory")
+	instance.Spec.LegacyComponents = nil
+	require.NoError(t, storage.Update(t.Context(), instance))
+	require.ErrorContains(t, deleteTunnel(), "MCP server inventory-backing")
+	require.NoError(t, storage.Delete(t.Context(), backing))
+	require.NoError(t, deleteTunnel())
+}
+
+func TestTunnelRetirementSerializesWithPublishingSnapshot(t *testing.T) {
+	ctx := t.Context()
+	const (
+		tunnelName = "mt1office"
+		target     = "https://inventory.internal/mcp"
+	)
+	tunnel := &v1.MCPTunnel{
+		Name:      tunnelName,
+		Namespace: system.DefaultNamespace,
+		Spec: v1.MCPTunnelSpec{Manifest: types.MCPTunnelManifest{
+			DisplayName: "Office",
+			AllowedURLs: []string{target},
+		}},
+	}
+	definition := &v1.VMCP{
+		Name:      "inventory",
+		Namespace: system.DefaultNamespace,
+		Spec: v1.VMCPSpec{Manifest: types.VMCPManifest{
+			Components: []types.VMCPComponent{{
+				ID: "inventory",
+				CatalogEntry: types.MCPServerCatalogEntrySnapshot{Manifest: types.MCPServerCatalogEntryManifest{
+					Runtime:      types.RuntimeRemote,
+					RemoteConfig: &types.RemoteCatalogConfig{FixedURL: target, TunnelName: tunnelName},
+				}},
+			}},
+		}},
+	}
+	storage := newMCPTunnelTestStorage(tunnel)
+	gateway := newHandlerTestGateway(t)
+	admission := tunnelpkg.NewReferenceAdmitter(storage, gateway.WithTunnelPolicyLock, nil)
+	handler := NewMCPTunnelHandler(nil)
+	deleteTunnel := func(ctx context.Context) error {
+		req, _ := catalogEntryRequest(t, storage, gateway, http.MethodDelete, "/api/mcp-tunnels/"+tunnelName, nil, map[string]string{"id": tunnelName})
+		req.Request = req.Request.WithContext(ctx)
+		return handler.Delete(req)
+	}
+
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	published := make(chan error, 1)
+	go func() {
+		published <- admission.Admit(ctx, definition, func() error {
+			close(entered)
+			select {
+			case <-release:
+				return storage.Create(ctx, definition)
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		})
+	}()
+	select {
+	case <-entered:
+	case err := <-published:
+		t.Fatalf("admission returned before publishing: %v", err)
+	}
+
+	deleteContext, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
+	err := deleteTunnel(deleteContext)
+	cancel()
+	close(release)
+	require.NoError(t, <-published)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.ErrorContains(t, deleteTunnel(ctx), "vMCP inventory component inventory")
+
+	require.NoError(t, storage.Delete(ctx, definition))
+	require.NoError(t, deleteTunnel(ctx))
+	definition.ResourceVersion = ""
+	err = admission.Admit(ctx, definition, func() error {
+		return storage.Create(ctx, definition)
+	})
+	require.ErrorContains(t, err, "failed to get MCP tunnel")
 }

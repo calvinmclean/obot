@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"fmt"
-	"slices"
 	"strings"
 
 	"github.com/obot-platform/obot/apiclient/types"
@@ -10,7 +9,6 @@ import (
 	v1 "github.com/obot-platform/obot/pkg/storage/apis/obot.obot.ai/v1"
 	"github.com/obot-platform/obot/pkg/system"
 	tunnelpkg "github.com/obot-platform/obot/pkg/tunnel"
-	kclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type mcpTunnelConnectionCloser interface {
@@ -97,67 +95,82 @@ func (*MCPTunnelHandler) Update(req api.Context) error {
 		return err
 	}
 
-	var tunnel v1.MCPTunnel
-	if err := req.Get(&tunnel, req.PathValue("id")); err != nil {
-		return fmt.Errorf("failed to get MCP tunnel: %w", err)
+	var stored v1.MCPTunnel
+	if err := withTunnelPolicyLock(req, func() error {
+		if err := req.Get(&stored, req.PathValue("id")); err != nil {
+			return fmt.Errorf("failed to get MCP tunnel: %w", err)
+		}
+		dependencies, err := tunnelpkg.ListDependencies(req.Context(), req.Storage, req.Namespace(), stored.Name)
+		if err != nil {
+			return fmt.Errorf("failed to list MCP tunnel dependencies: %w", err)
+		}
+		var blocked []string
+		for _, dependency := range dependencies {
+			if !manifest.AllowsURL(dependency.Target) {
+				blocked = append(blocked, fmt.Sprintf("%s (target %q)", dependency.Description, dependency.Target))
+			}
+		}
+		if len(blocked) > 0 {
+			return types.NewErrBadRequest("MCP tunnel %q cannot be updated because its allowlist would exclude: %s",
+				mcpTunnelDisplayName(stored), strings.Join(blocked, ", "))
+		}
+		stored.Spec.Manifest = manifest
+		if err := req.Update(&stored); err != nil {
+			return fmt.Errorf("failed to update MCP tunnel: %w", err)
+		}
+		return nil
+	}); err != nil {
+		return err
 	}
 
-	referencingEntries, err := listMCPTunnelCatalogEntries(req, tunnel.Name)
+	converted, err := convertMCPTunnel(stored, "")
 	if err != nil {
-		return fmt.Errorf("failed to list MCP tunnel dependencies: %w", err)
-	}
-	disallowedReferences := disallowedMCPTunnelCatalogEntryReferences(referencingEntries, tunnel.Name, manifest)
-	if len(disallowedReferences) > 0 {
-		return types.NewErrBadRequest(
-			"MCP tunnel %q cannot be updated because allowedURLs would no longer allow targets used by MCP server catalog entries: %s",
-			mcpTunnelDisplayName(tunnel),
-			strings.Join(disallowedReferences, ", "),
-		)
-	}
-
-	tunnel.Spec.Manifest = manifest
-	if err := req.Update(&tunnel); err != nil {
-		return fmt.Errorf("failed to update MCP tunnel: %w", err)
-	}
-
-	converted, err := convertMCPTunnel(tunnel, "")
-	if err != nil {
-		return fmt.Errorf("failed to convert MCP tunnel %q: %w", tunnel.Name, err)
+		return fmt.Errorf("failed to convert MCP tunnel %q: %w", stored.Name, err)
 	}
 	return req.Write(converted)
 }
 
 func (h *MCPTunnelHandler) Delete(req api.Context) error {
-	var tunnel v1.MCPTunnel
-	if err := req.Get(&tunnel, req.PathValue("id")); err != nil {
-		return fmt.Errorf("failed to get MCP tunnel: %w", err)
+	var stored v1.MCPTunnel
+	if err := withTunnelPolicyLock(req, func() error {
+		if err := req.Get(&stored, req.PathValue("id")); err != nil {
+			return fmt.Errorf("failed to get MCP tunnel: %w", err)
+		}
+		dependencies, err := tunnelpkg.ListDependencies(req.Context(), req.Storage, req.Namespace(), stored.Name)
+		if err != nil {
+			return fmt.Errorf("failed to list MCP tunnel dependencies: %w", err)
+		}
+		if len(dependencies) > 0 {
+			blocked := make([]string, 0, len(dependencies))
+			for _, dependency := range dependencies {
+				blocked = append(blocked, dependency.Description)
+			}
+			return types.NewErrBadRequest("MCP tunnel %q cannot be deleted because it is used by: %s",
+				mcpTunnelDisplayName(stored), strings.Join(blocked, ", "))
+		}
+		if err := req.Delete(&stored); err != nil {
+			return fmt.Errorf("failed to delete MCP tunnel: %w", err)
+		}
+		return nil
+	}); err != nil {
+		return err
 	}
 
-	referencingEntries, err := listMCPTunnelCatalogEntries(req, tunnel.Name)
-	if err != nil {
-		return fmt.Errorf("failed to list MCP tunnel dependencies: %w", err)
-	}
-	references := formatMCPTunnelCatalogEntryReferences(referencingEntries)
-	if len(references) > 0 {
-		return types.NewErrBadRequest(
-			"MCP tunnel %q cannot be deleted because it is used by MCP server catalog entries: %s",
-			mcpTunnelDisplayName(tunnel),
-			strings.Join(references, ", "),
-		)
-	}
-	credentialID := tunnel.Spec.CredentialID
+	credentialID := stored.Spec.CredentialID
 	if credentialID == "" {
-		credentialID, _ = tunnelpkg.CredentialID(tunnel.Spec.Credential)
-	}
-
-	if err := req.Delete(&tunnel); err != nil {
-		return fmt.Errorf("failed to delete MCP tunnel: %w", err)
+		credentialID, _ = tunnelpkg.CredentialID(stored.Spec.Credential)
 	}
 	if h.tunnels != nil {
-		h.tunnels.DisconnectCredential(tunnel.Name, credentialID)
+		h.tunnels.DisconnectCredential(stored.Name, credentialID)
 	}
+	return req.Write(map[string]string{"deleted": stored.Name})
+}
 
-	return req.Write(map[string]string{"deleted": tunnel.Name})
+func withTunnelPolicyLock(req api.Context, fn func() error) error {
+	if req.GatewayClient == nil {
+		return fn()
+	}
+	return req.GatewayClient.WithTunnelPolicyLock(req.Context(), fn)
 }
 
 func mcpTunnelDisplayName(tunnel v1.MCPTunnel) string {
@@ -165,82 +178,6 @@ func mcpTunnelDisplayName(tunnel v1.MCPTunnel) string {
 		return displayName
 	}
 	return tunnel.Name
-}
-
-func listMCPTunnelCatalogEntries(req api.Context, tunnelName string) ([]v1.MCPServerCatalogEntry, error) {
-	var (
-		referencingEntries []v1.MCPServerCatalogEntry
-		list               v1.MCPServerCatalogEntryList
-	)
-	if err := req.List(&list, kclient.MatchingFields{"spec.manifest.remoteConfig.tunnelName": tunnelName}); err != nil {
-		return nil, err
-	}
-	for _, entry := range list.Items {
-		if catalogEntryManifestUsesTunnel(entry.Spec.Manifest, tunnelName) {
-			referencingEntries = append(referencingEntries, entry)
-		}
-	}
-
-	slices.SortFunc(referencingEntries, func(a, b v1.MCPServerCatalogEntry) int {
-		return strings.Compare(a.Name, b.Name)
-	})
-	return referencingEntries, nil
-}
-
-func formatMCPTunnelCatalogEntryReferences(referencingEntries []v1.MCPServerCatalogEntry) []string {
-	references := make([]string, 0, len(referencingEntries))
-	for _, entry := range referencingEntries {
-		references = append(references, formatMCPTunnelCatalogEntryReference(entry))
-	}
-	return references
-}
-
-func disallowedMCPTunnelCatalogEntryReferences(referencingEntries []v1.MCPServerCatalogEntry, tunnelName string, manifest types.MCPTunnelManifest) []string {
-	var references []string
-	for _, entry := range referencingEntries {
-		for _, target := range catalogEntryManifestTunnelTargets(entry.Spec.Manifest, tunnelName) {
-			if !manifest.AllowsURL(target) {
-				references = append(references, fmt.Sprintf(
-					"%s (target %q)",
-					formatMCPTunnelCatalogEntryReference(entry),
-					target,
-				))
-			}
-		}
-	}
-	return references
-}
-
-func formatMCPTunnelCatalogEntryReference(entry v1.MCPServerCatalogEntry) string {
-	displayName := strings.TrimSpace(entry.Spec.Manifest.Name)
-	if displayName == "" || displayName == entry.Name {
-		return entry.Name
-	}
-	return fmt.Sprintf("%q (%s)", displayName, entry.Name)
-}
-
-func catalogEntryManifestTunnelTargets(manifest types.MCPServerCatalogEntryManifest, tunnelName string) []string {
-	switch manifest.Runtime {
-	case types.RuntimeRemote:
-		if manifest.RemoteConfig == nil || manifest.RemoteConfig.TunnelName != tunnelName {
-			return nil
-		}
-		if manifest.RemoteConfig.FixedURL != "" {
-			return []string{manifest.RemoteConfig.FixedURL}
-		}
-		if manifest.RemoteConfig.Hostname != "" {
-			return []string{manifest.RemoteConfig.Hostname}
-		}
-	}
-	return nil
-}
-
-func catalogEntryManifestUsesTunnel(manifest types.MCPServerCatalogEntryManifest, tunnelName string) bool {
-	switch manifest.Runtime {
-	case types.RuntimeRemote:
-		return manifest.RemoteConfig != nil && manifest.RemoteConfig.TunnelName == tunnelName
-	}
-	return false
 }
 
 func (h *MCPTunnelHandler) RotateSecret(req api.Context) error {

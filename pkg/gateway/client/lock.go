@@ -11,6 +11,7 @@ import (
 const (
 	claudeProvisionAdvisoryLockID int64 = 672046923
 	computeAdvisoryLockID         int64 = 0x6f626f744d435043 // "obotMCPC"
+	tunnelPolicyAdvisoryLockID    int64 = 0x6f626f7454554e4c // "obotTUNL"
 )
 
 // withAdvisoryLock runs fn while holding the Postgres advisory lock id, which is held across Obot replicas.
@@ -54,4 +55,13 @@ func (c *Client) WithComputeLock(ctx context.Context, fn func() error) error {
 		return c.withGate(ctx, computeAdvisoryLockID, fn)
 	}
 	return c.withAdvisoryLock(ctx, computeAdvisoryLockID, fn)
+}
+
+// WithTunnelPolicyLock serializes tunnel policy changes with writes that publish
+// tunnel dependencies, including writes made by another replica.
+func (c *Client) WithTunnelPolicyLock(ctx context.Context, fn func() error) error {
+	if c.db.WithContext(ctx).Name() != "postgres" {
+		return c.withGate(ctx, tunnelPolicyAdvisoryLockID, fn)
+	}
+	return c.withAdvisoryLock(ctx, tunnelPolicyAdvisoryLockID, fn)
 }
