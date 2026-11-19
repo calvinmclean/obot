@@ -71,6 +71,19 @@ func (c *Client) GetMCPOAuthToken(ctx context.Context, userID, mcpID, url string
 	return &token, nil
 }
 
+// GetMCPOAuthTokenForRoute requires an exact route binding. Unversioned
+// grants remain usable by connections that have never changed routes.
+func (c *Client) GetMCPOAuthTokenForRoute(ctx context.Context, userID, mcpID, url, routeRevision string) (*types.MCPOAuthToken, error) {
+	token, err := c.GetMCPOAuthToken(ctx, userID, mcpID, url)
+	if err != nil {
+		return nil, err
+	}
+	if token.RouteRevision != routeRevision || token.URL != url {
+		return nil, gorm.ErrRecordNotFound
+	}
+	return token, nil
+}
+
 // MCPOAuthDiscoveryRevision separates cached discovery by the caller's current grants.
 // Removal, reauthorization, and scope changes affect discovery identity. Token
 // values and expiry are excluded; read only grant metadata, never client secrets.
@@ -100,15 +113,26 @@ func (c *Client) ReplaceMCPOAuthToken(ctx context.Context, userID, mcpID, url, o
 		captured = challenge[0]
 	}
 
-	return c.saveMCPOAuthToken(ctx, userID, mcpID, url, oauthAuthRequestID, oauthConf, token, nil, captured)
+	return c.saveMCPOAuthToken(ctx, userID, mcpID, url, oauthAuthRequestID, "", oauthConf, token, nil, nil, captured)
+}
+
+// ReplaceMCPOAuthTokenForRoute records a callback against its original route
+// and refuses to replace a grant that changed while the code exchange ran.
+func (c *Client) ReplaceMCPOAuthTokenForRoute(ctx context.Context, userID, mcpID, url, oauthAuthRequestID, routeRevision, previousGrantID string, oauthConf *oauth2.Config, token *oauth2.Token, challenge string) error {
+	return c.saveMCPOAuthToken(ctx, userID, mcpID, url, oauthAuthRequestID, routeRevision, oauthConf, token, nil, &previousGrantID, challenge)
 }
 
 func (c *Client) RefreshMCPOAuthToken(ctx context.Context, userID, mcpID, url, grantID string, oauthConf *oauth2.Config, token *oauth2.Token) error {
-	return c.saveMCPOAuthToken(ctx, userID, mcpID, url, "", oauthConf, token, &grantID, "")
+	return c.RefreshMCPOAuthTokenForRoute(ctx, userID, mcpID, url, grantID, "", oauthConf, token)
 }
 
-func (c *Client) saveMCPOAuthToken(ctx context.Context, userID, mcpID, url, oauthAuthRequestID string, oauthConf *oauth2.Config, token *oauth2.Token, refreshGrantID *string, challenge string) error {
+func (c *Client) RefreshMCPOAuthTokenForRoute(ctx context.Context, userID, mcpID, url, grantID, routeRevision string, oauthConf *oauth2.Config, token *oauth2.Token) error {
+	return c.saveMCPOAuthToken(ctx, userID, mcpID, url, "", routeRevision, oauthConf, token, &grantID, nil, "")
+}
+
+func (c *Client) saveMCPOAuthToken(ctx context.Context, userID, mcpID, url, oauthAuthRequestID, routeRevision string, oauthConf *oauth2.Config, token *oauth2.Token, refreshGrantID, previousGrantID *string, challenge string) error {
 	t := &types.MCPOAuthToken{
+		RouteRevision:      routeRevision,
 		GrantID:            rand.Text(),
 		UpstreamChallenge:  challenge,
 		UserID:             userID,
@@ -133,7 +157,7 @@ func (c *Client) saveMCPOAuthToken(ctx context.Context, userID, mcpID, url, oaut
 
 	if err := c.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		// Insert first so concurrent callbacks also serialize when no grant exists yet.
-		if refreshGrantID == nil {
+		if refreshGrantID == nil && (previousGrantID == nil || *previousGrantID == "") {
 			result := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(t)
 			if result.Error != nil || result.RowsAffected == 1 {
 				return result.Error
@@ -142,13 +166,19 @@ func (c *Client) saveMCPOAuthToken(ctx context.Context, userID, mcpID, url, oaut
 
 		var current types.MCPOAuthToken
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
-			Select("URL", "AuthURL", "TokenURL", "Scopes", "GrantID", "OAuthAuthRequestID", "UpstreamChallenge").
+			Select("URL", "AuthURL", "TokenURL", "Scopes", "GrantID", "OAuthAuthRequestID", "UpstreamChallenge", "RouteRevision").
 			Where("user_id = ? AND mcp_id = ?", userID, mcpID).Take(&current).Error; err != nil {
 			return err
 		}
 
+		if previousGrantID != nil && current.GrantID != *previousGrantID && current.RouteRevision != routeRevision {
+			return fmt.Errorf("upstream OAuth route grant changed during authorization")
+		}
+		if routeRevision == "" && current.RouteRevision != "" {
+			return fmt.Errorf("upstream OAuth grant belongs to a versioned route")
+		}
 		// A callback or refresh started before another grant must not erase its permissions.
-		if current.URL == url && current.AuthURL == oauthConf.Endpoint.AuthURL && current.TokenURL == oauthConf.Endpoint.TokenURL {
+		if current.RouteRevision == routeRevision && current.URL == url && current.AuthURL == oauthConf.Endpoint.AuthURL && current.TokenURL == oauthConf.Endpoint.TokenURL {
 			for scope := range strings.FieldsSeq(current.Scopes) {
 				if !slices.Contains(oauthConf.Scopes, scope) {
 					return fmt.Errorf("upstream OAuth permissions changed; start a new authorization")
@@ -157,7 +187,7 @@ func (c *Client) saveMCPOAuthToken(ctx context.Context, userID, mcpID, url, oaut
 		}
 
 		if refreshGrantID != nil {
-			if current.GrantID != *refreshGrantID || current.URL != url {
+			if current.GrantID != *refreshGrantID || current.URL != url || current.RouteRevision != routeRevision {
 				return fmt.Errorf("upstream OAuth grant changed during refresh")
 			}
 
@@ -207,6 +237,13 @@ func (c *Client) DeleteMCPOAuthTokenForURL(ctx context.Context, userID, mcpID, m
 	return c.triggerMCPOAuthTokenChange(ctx, mcpID)
 }
 
+func (c *Client) DeleteMCPOAuthTokenForRoute(ctx context.Context, userID, mcpID, url, routeRevision string) error {
+	if err := c.db.WithContext(ctx).Delete(&types.MCPOAuthToken{}, "user_id = ? AND mcp_id = ? AND (url = ? OR url = '') AND COALESCE(route_revision, '') = ?", userID, mcpID, url, routeRevision).Error; err != nil {
+		return err
+	}
+	return c.triggerMCPOAuthTokenChange(ctx, mcpID)
+}
+
 func (c *Client) DeleteMCPOAuthTokens(ctx context.Context, userID, mcpID string) error {
 	if err := c.db.WithContext(ctx).Delete(&types.MCPOAuthToken{}, "user_id = ? AND mcp_id = ?", userID, mcpID).Error; err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return err
@@ -231,8 +268,13 @@ func (c *Client) triggerMCPOAuthTokenChange(ctx context.Context, mcpID string) e
 // Pending state methods
 
 func (c *Client) CreateMCPOAuthPendingState(ctx context.Context, userID, initiatorUserID, mcpID, mcpURL, tunnelName, oauthAuthRequestID, state, verifier, resourceURL string, oauthConf *oauth2.Config, upstreamChallenge ...string) error {
+	return c.CreateMCPOAuthPendingStateForRoute(ctx, userID, initiatorUserID, mcpID, mcpURL, tunnelName, "", oauthAuthRequestID, state, verifier, resourceURL, oauthConf, upstreamChallenge...)
+}
+
+func (c *Client) CreateMCPOAuthPendingStateForRoute(ctx context.Context, userID, initiatorUserID, mcpID, mcpURL, tunnelName, routeRevision, oauthAuthRequestID, state, verifier, resourceURL string, oauthConf *oauth2.Config, upstreamChallenge ...string) error {
 	hashedState := fmt.Sprintf("%x", sha256.Sum256([]byte(state)))
 	ps := &types.MCPOAuthPendingState{
+		RouteRevision:      routeRevision,
 		HashedState:        hashedState,
 		State:              state,
 		Verifier:           verifier,

@@ -350,7 +350,7 @@ func (h *Handler) Proxy(req api.Context) error {
 				return fmt.Errorf("failed to get HTTP client for token refresh: %w", err)
 			}
 
-			tokenSource, err = h.globalTokenStore.ForUserAndMCP(serverConfig.UserID, cmp.Or(serverConfig.MCPServerInstanceID, serverConfig.MCPServerName), serverConfig.URL).TokenSource(context.WithValue(h.ctx, oauth2.HTTPClient, refreshClient))
+			tokenSource, err = h.globalTokenStore.ForUserAndMCP(serverConfig.UserID, cmp.Or(serverConfig.MCPServerInstanceID, serverConfig.MCPServerName), serverConfig.URL, serverConfig.OAuthRouteRevision).TokenSource(context.WithValue(h.ctx, oauth2.HTTPClient, refreshClient))
 			if err != nil {
 				return fmt.Errorf("failed to get token source: %w", err)
 			}

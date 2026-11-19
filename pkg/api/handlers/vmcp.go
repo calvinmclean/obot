@@ -347,8 +347,12 @@ func (h *VMCPHandler) TriggerUpdate(req api.Context) error {
 		if err := req.Get(&vmcp, req.PathValue("vmcp_id")); err != nil {
 			return err
 		}
+		previous := slices.Clone(vmcp.Spec.Manifest.Components)
 		if err := h.loadComponentSnapshots(req, &vmcp.Spec.Manifest, vmcp.Spec.UserID, nil, false); err != nil {
 			return err
+		}
+		for i := range vmcp.Spec.Manifest.Components {
+			vmcpconfig.VersionOAuthRoute(&vmcp.Spec.Manifest.Components[i].CatalogEntry, previous[i].CatalogEntry)
 		}
 		if err := vmcp.Spec.Manifest.Validate(); err != nil {
 			return types.NewErrBadRequest("invalid VMCP manifest: %v", err)
@@ -540,6 +544,7 @@ func (h *VMCPHandler) loadComponentSnapshots(req api.Context, manifest *types.VM
 				Manifest:         effective,
 				UnsupportedTools: entry.Spec.UnsupportedTools,
 			}
+			vmcpconfig.VersionOAuthRoute(&component.CatalogEntry, types.MCPServerCatalogEntrySnapshot{})
 			component.SourceDigest = vmcpconfig.SourceDigest(component.CatalogEntry)
 			component.OAuthCredentialID = vmcpconfig.StaticOAuthCredentialReference(entry.Spec.Manifest, entry.Name)
 			if component.Name == "" {

@@ -9365,6 +9365,12 @@ func schema_obot_platform_obot_apiclient_types_MCPServerCatalogEntrySnapshot(ref
 							},
 						},
 					},
+					"oauthRouteRevision": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
 				},
 				Required: []string{"manifest"},
 			},
@@ -23278,6 +23284,12 @@ func schema_storage_apis_obotobotai_v1_MCPServerSpec(ref common.ReferenceCallbac
 						SchemaProps: spec.SchemaProps{
 							Default: map[string]interface{}{},
 							Ref:     ref("github.com/obot-platform/obot/apiclient/types.MCPServerManifest"),
+						},
+					},
+					"oauthRouteRevision": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
 						},
 					},
 					"unsupportedTools": {

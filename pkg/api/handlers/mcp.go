@@ -58,10 +58,11 @@ type vmcpOAuthStatus struct {
 // one vMCP component is stored. The URL is empty when the component is not a
 // remote server and therefore never holds a token.
 type vmcpComponentOAuthTarget struct {
-	componentID string
-	serverName  string
-	connectID   string
-	url         string
+	componentID   string
+	serverName    string
+	connectID     string
+	url           string
+	routeRevision string
 }
 
 type urlTemplateConfigurationError struct {
@@ -1339,7 +1340,7 @@ func (m *MCPHandler) GetVMCPOAuthStatus(req api.Context) error {
 		if target.url == "" {
 			continue
 		}
-		if _, err := req.GatewayClient.GetMCPOAuthToken(req.Context(), req.User.GetUID(), target.connectID, target.url); err != nil {
+		if _, err := req.GatewayClient.GetMCPOAuthTokenForRoute(req.Context(), req.User.GetUID(), target.connectID, target.url, target.routeRevision); err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				continue
 			}
@@ -1384,6 +1385,7 @@ func (m *MCPHandler) vmcpComponentOAuthTargets(req api.Context, vmcpID, catalogI
 			if componentConfig.Runtime == types.RuntimeRemote {
 				target.serverName = componentServer.Name
 				target.url = cmp.Or(componentConfig.URL, component.Spec.Manifest.RemoteConfig.URL)
+				target.routeRevision = componentConfig.OAuthRouteRevision
 			}
 		}
 		targets = append(targets, target)

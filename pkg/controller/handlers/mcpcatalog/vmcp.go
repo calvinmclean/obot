@@ -136,6 +136,17 @@ func (h *Handler) prepareCatalogVMCPs(ctx context.Context, c kclient.Client, cat
 			}
 			continue
 		}
+		for i := range vmcp.Spec.Manifest.Components {
+			component := &vmcp.Spec.Manifest.Components[i]
+			var previous types.MCPServerCatalogEntrySnapshot
+			for _, old := range existingComponents(existing) {
+				if old.ID == component.ID {
+					previous = old.CatalogEntry
+					break
+				}
+			}
+			vmcpconfig.VersionOAuthRoute(&component.CatalogEntry, previous)
+		}
 		if err := vmcp.Spec.Manifest.Validate(); err != nil {
 			addSyncError(syncErrors, sourceURL, fmt.Sprintf("vMCP %q: %v", vmcp.Spec.Manifest.DisplayName, err))
 			continue

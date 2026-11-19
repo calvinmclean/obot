@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/obot-platform/obot/apiclient/types"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNeedsUpdate(t *testing.T) {
@@ -51,4 +52,27 @@ func TestNeedsUpdate(t *testing.T) {
 			t.Fatal("reverted source reported an update for a legacy digest")
 		}
 	}
+}
+
+func TestVersionOAuthRouteRequiresFreshAuthorizationOnReturn(t *testing.T) {
+	direct := types.MCPServerCatalogEntrySnapshot{
+		Manifest: types.MCPServerCatalogEntryManifest{
+			Runtime:      types.RuntimeRemote,
+			RemoteConfig: &types.RemoteCatalogConfig{FixedURL: "https://provider.example/mcp"},
+		},
+	}
+	tunneled := *direct.DeepCopy()
+	tunneled.Manifest.RemoteConfig.TunnelName = "mt1office"
+	VersionOAuthRoute(&tunneled, direct)
+	require.NotEmpty(t, tunneled.OAuthRouteRevision)
+	unchanged := *tunneled.DeepCopy()
+	VersionOAuthRoute(&unchanged, tunneled)
+	require.Equal(t, tunneled.OAuthRouteRevision, unchanged.OAuthRouteRevision)
+	VersionOAuthRoute(&direct, tunneled)
+	require.NotEmpty(t, direct.OAuthRouteRevision)
+	require.NotEqual(t, tunneled.OAuthRouteRevision, direct.OAuthRouteRevision)
+	returned := *tunneled.DeepCopy()
+	VersionOAuthRoute(&returned, direct)
+	require.NotEqual(t, tunneled.OAuthRouteRevision, returned.OAuthRouteRevision)
+	require.Equal(t, SourceDigest(tunneled), SourceDigest(returned))
 }

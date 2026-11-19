@@ -1214,12 +1214,14 @@ func (h *MCPCatalogHandler) vmcpComponentToolPreviewConfig(req api.Context) (v1.
 		ComponentID         string
 		UserID              string
 		SnapshotDigest      string
+		OAuthRouteRevision  string `json:",omitempty"`
 		ConfigurationDigest string
 	}{
 		VMCPID:              vmcp.Name,
 		ComponentID:         component.ID,
 		UserID:              req.User.GetUID(),
 		SnapshotDigest:      utils.Digest(*manifest),
+		OAuthRouteRevision:  component.CatalogEntry.OAuthRouteRevision,
 		ConfigurationDigest: utils.Digest(staticConfiguration),
 	})[:16]
 	server.Name = tempName

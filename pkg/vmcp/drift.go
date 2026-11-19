@@ -1,6 +1,7 @@
 package vmcp
 
 import (
+	"crypto/rand"
 	"slices"
 
 	"github.com/obot-platform/obot/apiclient/types"
@@ -12,6 +13,7 @@ import (
 // icon, repository, entry key, tool preview, metadata, upgrade-note, and Obot
 // version range changes alone do not report drift.
 func SourceDigest(snapshot types.MCPServerCatalogEntrySnapshot) string {
+	snapshot.OAuthRouteRevision = ""
 	snapshot.Manifest.MinObotVersion = ""
 	snapshot.Manifest.MaxObotVersion = ""
 	snapshot.Manifest.RepoURL = ""
@@ -51,4 +53,23 @@ func NeedsUpdate(component types.VMCPComponent, current types.MCPServerCatalogEn
 	// The source digest migration keeps a legacy digest it cannot recompute
 	// from a stripped snapshot. It still matches its source if that reverts.
 	return !slices.Contains(LegacySourceDigests(current), component.SourceDigest)
+}
+
+// VersionOAuthRoute changes the grant identity when a component adopts a
+// different route. Returning to a prior route must not revive its old grant.
+func VersionOAuthRoute(snapshot *types.MCPServerCatalogEntrySnapshot, previous types.MCPServerCatalogEntrySnapshot) {
+	var current, old types.RemoteCatalogConfig
+	if snapshot.Manifest.RemoteConfig != nil {
+		current = *snapshot.Manifest.RemoteConfig
+	}
+	if previous.Manifest.RemoteConfig != nil {
+		old = *previous.Manifest.RemoteConfig
+	}
+	snapshot.OAuthRouteRevision = previous.OAuthRouteRevision
+	if current.TunnelName == "" && old.TunnelName == "" && snapshot.OAuthRouteRevision == "" {
+		return
+	}
+	if current.TunnelName != old.TunnelName || current.FixedURL != old.FixedURL {
+		snapshot.OAuthRouteRevision = rand.Text()
+	}
 }

@@ -14,7 +14,7 @@ import (
 )
 
 type GlobalTokenStore interface {
-	ForUserAndMCP(userID, mcpID, mcpURL string) TokenStorage
+	ForUserAndMCP(userID, mcpID, mcpURL string, routeRevision ...string) TokenStorage
 }
 
 type TokenStorage interface {
@@ -32,6 +32,7 @@ type globalTokenStore struct {
 type tokenStore struct {
 	gatewayClient         *gateway.Client
 	userID, mcpID, mcpURL string
+	routeRevision         string
 }
 
 // storageBackedTokenSource implements the oauth2.TokenSource interface to store new tokens in the TokenStorage.
@@ -52,8 +53,13 @@ func NewGlobalTokenStore(gatewayClient *gateway.Client) GlobalTokenStore {
 	}
 }
 
-func (g *globalTokenStore) ForUserAndMCP(userID, mcpID, mcpURL string) TokenStorage {
+func (g *globalTokenStore) ForUserAndMCP(userID, mcpID, mcpURL string, routeRevision ...string) TokenStorage {
+	var revision string
+	if len(routeRevision) > 0 {
+		revision = routeRevision[0]
+	}
 	return &tokenStore{
+		routeRevision: revision,
 		gatewayClient: g.gatewayClient,
 		mcpID:         mcpID,
 		userID:        userID,
@@ -62,17 +68,12 @@ func (g *globalTokenStore) ForUserAndMCP(userID, mcpID, mcpURL string) TokenStor
 }
 
 func (t *tokenStore) GetTokenConfig(ctx context.Context) (*oauth2.Config, *oauth2.Token, error) {
-	mcpToken, err := t.gatewayClient.GetMCPOAuthToken(ctx, t.userID, t.mcpID, t.mcpURL)
+	mcpToken, err := t.gatewayClient.GetMCPOAuthTokenForRoute(ctx, t.userID, t.mcpID, t.mcpURL, t.routeRevision)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil, nil
 		}
 		return nil, nil, err
-	}
-
-	// A grant for another resource must not supply credentials or scopes to this connection.
-	if mcpToken.URL != t.mcpURL {
-		return nil, nil, nil
 	}
 
 	conf := &oauth2.Config{
@@ -103,15 +104,18 @@ func (t *tokenStore) GetTokenConfig(ctx context.Context) (*oauth2.Config, *oauth
 func (t *tokenStore) RefreshTokenConfig(ctx context.Context, config *oauth2.Config, previous, token *oauth2.Token) error {
 	grantID, _ := previous.Extra("obot_grant_id").(string)
 
-	return t.gatewayClient.RefreshMCPOAuthToken(ctx, t.userID, t.mcpID, t.mcpURL, grantID, config, token)
+	return t.gatewayClient.RefreshMCPOAuthTokenForRoute(ctx, t.userID, t.mcpID, t.mcpURL, grantID, t.routeRevision, config, token)
 }
 
 func (t *tokenStore) SetTokenConfig(ctx context.Context, config *oauth2.Config, token *oauth2.Token) error {
+	if t.routeRevision != "" {
+		return t.gatewayClient.ReplaceMCPOAuthTokenForRoute(ctx, t.userID, t.mcpID, t.mcpURL, "", t.routeRevision, "", config, token, "")
+	}
 	return t.gatewayClient.ReplaceMCPOAuthToken(ctx, t.userID, t.mcpID, t.mcpURL, "", config, token)
 }
 
 func (t *tokenStore) DeleteTokenConfig(ctx context.Context) error {
-	return t.gatewayClient.DeleteMCPOAuthTokenForURL(ctx, t.userID, t.mcpID, t.mcpURL)
+	return t.gatewayClient.DeleteMCPOAuthTokenForRoute(ctx, t.userID, t.mcpID, t.mcpURL, t.routeRevision)
 }
 
 func (t *tokenStore) TokenSource(ctx context.Context) (oauth2.TokenSource, error) {

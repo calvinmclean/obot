@@ -44,7 +44,7 @@ func (m *MCPHandler) RegisterOAuthDebuggerClient(req api.Context) error {
 		return err
 	}
 
-	existing, err := req.GatewayClient.GetMCPOAuthToken(req.Context(), req.User.GetUID(), server.Name, serverConfig.URL)
+	existing, err := req.GatewayClient.GetMCPOAuthTokenForRoute(req.Context(), req.User.GetUID(), server.Name, serverConfig.URL, serverConfig.OAuthRouteRevision)
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return fmt.Errorf("read existing OAuth grant: %w", err)
 	}
@@ -108,13 +108,14 @@ func (m *MCPHandler) RegisterOAuthDebuggerClient(req api.Context) error {
 
 	conf := oauthDebuggerConfig(clientID, clientSecret, authServer.AuthorizationEndpoint, authServer.TokenEndpoint, registration.TokenEndpointAuthMethod, firstString(registration.RedirectURIs), registration.Scope, staticClient)
 	resourceURL = mcp.ResolveOAuthResourceURL(authServer.AuthorizationEndpoint, resourceURL, serverConfig.URL)
-	if err := req.GatewayClient.CreateMCPOAuthPendingState(
+	if err := req.GatewayClient.CreateMCPOAuthPendingStateForRoute(
 		req.Context(),
 		req.User.GetUID(),
 		req.User.GetUID(),
 		server.Name,
 		serverConfig.URL,
 		serverConfig.TunnelName,
+		serverConfig.OAuthRouteRevision,
 		OAuthDebuggerPendingStateMarker,
 		state,
 		oauth2.GenerateVerifier(),
@@ -132,7 +133,7 @@ func (m *MCPHandler) RegisterOAuthDebuggerClient(req api.Context) error {
 
 // GetOAuthDebuggerAuthorizationURL creates fresh pending OAuth state and returns the remote authorization URL.
 func (m *MCPHandler) GetOAuthDebuggerAuthorizationURL(req api.Context) error {
-	server, _, err := m.mcpSessionManager.ServerForAction(req.Context(), req.PathValue("mcp_server_id"), req.User)
+	server, serverConfig, err := m.mcpSessionManager.ServerForAction(req.Context(), req.PathValue("mcp_server_id"), req.User)
 	if err != nil {
 		return err
 	}
@@ -153,7 +154,7 @@ func (m *MCPHandler) GetOAuthDebuggerAuthorizationURL(req api.Context) error {
 		return err
 	}
 
-	if storedClient.UserID != req.User.GetUID() || storedClient.MCPID != server.Name || storedClient.OAuthAuthRequestID != OAuthDebuggerPendingStateMarker {
+	if storedClient.UserID != req.User.GetUID() || storedClient.MCPID != server.Name || storedClient.RouteRevision != serverConfig.OAuthRouteRevision || storedClient.OAuthAuthRequestID != OAuthDebuggerPendingStateMarker {
 		return types.NewErrNotFound("OAuth debugger client not found")
 	}
 
@@ -191,8 +192,19 @@ func (m *MCPHandler) ExchangeOAuthDebuggerToken(req api.Context) error {
 	if err != nil {
 		return err
 	}
-	if pendingState.UserID != req.User.GetUID() || pendingState.MCPID != server.Name || pendingState.URL != serverConfig.URL || pendingState.OAuthAuthRequestID != OAuthDebuggerPendingStateMarker {
+	if pendingState.UserID != req.User.GetUID() || pendingState.MCPID != server.Name || pendingState.URL != serverConfig.URL || pendingState.RouteRevision != serverConfig.OAuthRouteRevision || pendingState.OAuthAuthRequestID != OAuthDebuggerPendingStateMarker {
 		return types.NewErrNotFound("OAuth debugger authorization state not found")
+	}
+
+	var previousGrantID string
+	if pendingState.RouteRevision != "" {
+		grant, err := req.GatewayClient.GetMCPOAuthToken(req.Context(), req.User.GetUID(), server.Name, serverConfig.URL)
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+		if grant != nil {
+			previousGrantID = grant.GrantID
+		}
 	}
 
 	conf := oauthDebuggerConfigFromPendingState(pendingState)
@@ -207,7 +219,19 @@ func (m *MCPHandler) ExchangeOAuthDebuggerToken(req api.Context) error {
 		return fmt.Errorf("failed to exchange OAuth code: %w", err)
 	}
 
-	if err := req.GatewayClient.ReplaceMCPOAuthToken(req.Context(), req.User.GetUID(), server.Name, serverConfig.URL, "", conf, token); err != nil {
+	if pendingState.RouteRevision != "" {
+		_, current, err := m.mcpSessionManager.ServerForAction(req.Context(), req.PathValue("mcp_server_id"), req.User)
+		if err != nil {
+			return err
+		}
+		if current.OAuthRouteRevision != pendingState.RouteRevision {
+			return types.NewErrBadRequest("upstream OAuth route changed; start a new authorization")
+		}
+		err = req.GatewayClient.ReplaceMCPOAuthTokenForRoute(req.Context(), req.User.GetUID(), server.Name, serverConfig.URL, "", pendingState.RouteRevision, previousGrantID, conf, token, "")
+		if err != nil {
+			return err
+		}
+	} else if err := req.GatewayClient.ReplaceMCPOAuthToken(req.Context(), req.User.GetUID(), server.Name, serverConfig.URL, "", conf, token); err != nil {
 		return err
 	}
 	_ = req.GatewayClient.DeleteMCPOAuthPendingState(req.Context(), pendingState.HashedState)

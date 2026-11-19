@@ -445,7 +445,7 @@ func (h *Handler) SyncThirdPartyAuthStatus(req router.Request, _ router.Response
 		return nil
 	}
 
-	token, err := h.gatewayClient.GetMCPOAuthToken(req.Ctx, server.Spec.UserID, server.Name, server.Spec.Manifest.RemoteConfig.URL)
+	token, err := h.gatewayClient.GetMCPOAuthTokenForRoute(req.Ctx, server.Spec.UserID, server.Name, server.Spec.Manifest.RemoteConfig.URL, server.Spec.OAuthRouteRevision)
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return err
 	}

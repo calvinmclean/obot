@@ -180,6 +180,9 @@ func TestCatalogSyncAdoptsTunnelAssignment(t *testing.T) {
 	sync()
 	assigned := component()
 	require.Equal(t, office.Name, assigned.CatalogEntry.Manifest.RemoteConfig.TunnelName)
+	require.NotEmpty(t, assigned.CatalogEntry.OAuthRouteRevision)
+	sync()
+	require.Equal(t, assigned.CatalogEntry.OAuthRouteRevision, component().CatalogEntry.OAuthRouteRevision)
 	config, err := runtimeConfig(assigned)
 	require.NoError(t, err)
 	require.Equal(t, office.Name, config.TunnelName)
@@ -208,6 +211,8 @@ func TestCatalogSyncAdoptsTunnelAssignment(t *testing.T) {
 	save("", "")
 	sync()
 	require.Empty(t, component().CatalogEntry.Manifest.RemoteConfig.TunnelName)
+	require.NotEmpty(t, component().CatalogEntry.OAuthRouteRevision)
+	require.NotEqual(t, assigned.CatalogEntry.OAuthRouteRevision, component().CatalogEntry.OAuthRouteRevision)
 	_, err = runtimeConfig(component())
 	require.ErrorContains(t, err, "MCP tunnel assignment required")
 }

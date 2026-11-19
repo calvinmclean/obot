@@ -48,6 +48,7 @@ func EnsureMCPServers(req router.Request, _ router.Response) error {
 				MCPCatalogID:              component.MCPCatalogID,
 				MCPServerCatalogEntryName: component.MCPServerCatalogEntryID,
 				Manifest:                  manifest,
+				OAuthRouteRevision:        component.CatalogEntry.OAuthRouteRevision,
 				UnsupportedTools:          slices.Clone(component.CatalogEntry.UnsupportedTools),
 				UserID:                    vmcp.Spec.CreatorUserID,
 				VMCPID:                    vmcp.Name,
@@ -81,6 +82,7 @@ func EnsureMCPServers(req router.Request, _ router.Response) error {
 				current.Spec.MCPServerCatalogEntryName != server.Spec.MCPServerCatalogEntryName ||
 				!reflect.DeepEqual(current.Spec.Manifest.Config, server.Spec.Manifest.Config) {
 				current.Spec.Manifest = server.Spec.Manifest
+				current.Spec.OAuthRouteRevision = server.Spec.OAuthRouteRevision
 				current.Spec.UnsupportedTools = server.Spec.UnsupportedTools
 				current.Spec.UserID = server.Spec.UserID
 				current.Spec.MCPCatalogID = server.Spec.MCPCatalogID

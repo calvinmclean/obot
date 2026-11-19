@@ -164,7 +164,7 @@ func (*staticOAuthTokenStorage) DeleteTokenConfig(context.Context) error {
 	return nil
 }
 
-func (s staticOAuthGlobalTokenStore) ForUserAndMCP(string, string, string) mcp.TokenStorage {
+func (s staticOAuthGlobalTokenStore) ForUserAndMCP(string, string, string, ...string) mcp.TokenStorage {
 	return s.storage
 }
 

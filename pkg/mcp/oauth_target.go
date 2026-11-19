@@ -18,6 +18,7 @@ func OAuthTargetHash(server v1.MCPServer, cfg ServerConfig) string {
 		Component               string
 		URL                     string
 		Tunnel                  string
+		RouteRevision           string `json:",omitempty"`
 		Manifest                any
 		Headers                 []string
 		PassthroughHeaderNames  []string
@@ -31,6 +32,7 @@ func OAuthTargetHash(server v1.MCPServer, cfg ServerConfig) string {
 		Component:               server.Spec.VMCPComponentID,
 		URL:                     cfg.URL,
 		Tunnel:                  cfg.TunnelName,
+		RouteRevision:           cfg.OAuthRouteRevision,
 		Manifest:                server.Spec.Manifest,
 		Headers:                 cfg.Headers,
 		PassthroughHeaderNames:  cfg.PassthroughHeaderNames,

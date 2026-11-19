@@ -205,7 +205,7 @@ func (f *MCPOAuthHandlerFactory) pendingCapturedAuth(req api.Context, requestID,
 			continue
 		}
 
-		if completed, err := reconcileCapturedRequirement(req, request.Name, requirement); err != nil {
+		if completed, err := reconcileCapturedRequirement(req, request.Name, requirement, cfg.OAuthRouteRevision); err != nil {
 			return nil, err
 		} else if completed {
 			continue
@@ -446,12 +446,16 @@ func (f *MCPOAuthHandlerFactory) completeCapturedCallback(req api.Context, pendi
 }
 
 // The token records the callback outcome atomically, so a failed progress write can be retried without exchanging the code again.
-func reconcileCapturedRequirement(req api.Context, requestID string, requirement v1.UpstreamOAuthRequirement) (bool, error) {
+func reconcileCapturedRequirement(req api.Context, requestID string, requirement v1.UpstreamOAuthRequirement, revisions ...string) (bool, error) {
 	if requirement.Completed || !requirement.Started {
 		return requirement.Completed, nil
 	}
 
-	grant, err := req.GatewayClient.GetMCPOAuthToken(req.Context(), req.User.GetUID(), requirement.ConnectID, requirement.URL)
+	var revision string
+	if len(revisions) > 0 {
+		revision = revisions[0]
+	}
+	grant, err := req.GatewayClient.GetMCPOAuthTokenForRoute(req.Context(), req.User.GetUID(), requirement.ConnectID, requirement.URL, revision)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return false, nil
 	}
@@ -487,6 +491,9 @@ func (f *MCPOAuthHandlerFactory) pendingCapturedAuthURL(req api.Context, request
 		return "", err
 	}
 
+	if pending.RouteRevision != cfg.OAuthRouteRevision {
+		return "", types.NewErrBadRequest("upstream OAuth route changed; start a new authorization")
+	}
 	// Reuse the durable registration, state and PKCE verifier; never start another attempt.
 	conf := &oauth2.Config{
 		ClientID:    pending.ClientID,

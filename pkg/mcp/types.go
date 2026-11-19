@@ -33,7 +33,8 @@ var (
 )
 
 type ServerConfig struct {
-	Runtime types.Runtime `json:"runtime"`
+	OAuthRouteRevision string
+	Runtime            types.Runtime `json:"runtime"`
 
 	// uvx/npx based configuration.
 	Command string   `json:"command"`
@@ -703,6 +704,7 @@ func ServerToServerConfig(mcpServer v1.MCPServer, audiences []string, userID, sc
 	}
 
 	serverConfig := ServerConfig{
+		OAuthRouteRevision:     mcpServer.Spec.OAuthRouteRevision,
 		Env:                    make([]string, 0, len(mcpServer.Spec.Manifest.Config)),
 		UserID:                 userID,
 		OwnerUserID:            mcpServer.Spec.UserID,

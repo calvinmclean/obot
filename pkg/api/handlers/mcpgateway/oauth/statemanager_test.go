@@ -1,9 +1,11 @@
 package oauth
 
 import (
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -17,6 +19,7 @@ import (
 	"github.com/obot-platform/obot/pkg/system"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2"
+	"gorm.io/gorm"
 	"k8s.io/apiserver/pkg/authentication/user"
 	clientfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -260,4 +263,81 @@ func TestStateManagerRejectsOverlappingScopeReplacement(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "retry-token", stored.AccessToken)
 	require.Equal(t, "write read", stored.Scopes)
+}
+
+func TestOAuthCallbackRejectsSupersededRoute(t *testing.T) {
+	ctx := t.Context()
+	const (
+		serverName = "ms1route-test"
+		upstream   = "https://provider.test/mcp"
+	)
+	server := &v1.MCPServer{
+		Name:      serverName,
+		Namespace: system.DefaultNamespace,
+		Spec: v1.MCPServerSpec{
+			OAuthRouteRevision: "route-one",
+			Manifest: types.MCPServerManifest{
+				Runtime:      types.RuntimeRemote,
+				RemoteConfig: &types.RemoteRuntimeConfig{URL: upstream, TunnelName: "mt1office"},
+			},
+		},
+	}
+	storage := clientfake.NewClientBuilder().WithScheme(scheme.Scheme).WithObjects(server).Build()
+	gateway := vmcpConsentGateway(t)
+	factory := &MCPOAuthHandlerFactory{client: storage}
+	var exchanges int
+	var nextRoute string
+	conf := &oauth2.Config{
+		ClientID: "client",
+		Endpoint: oauth2.Endpoint{TokenURL: "https://provider.test/token", AuthStyle: oauth2.AuthStyleInParams},
+	}
+	tokenClient := &http.Client{Transport: roundTripFunc(func(_ *http.Request) (*http.Response, error) {
+		exchanges++
+		if nextRoute != "" {
+			server.Spec.OAuthRouteRevision = nextRoute
+			if err := storage.Update(ctx, server); err != nil {
+				return nil, err
+			}
+		}
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": {"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(`{"access_token":"token","token_type":"Bearer"}`)),
+		}, nil
+	})}
+	state := newStateManager(gateway, fixedTokenClient(tokenClient))
+	state.validateRoute = factory.validatePendingRoute
+	store := func(key, revision string) {
+		t.Helper()
+		require.NoError(t, state.storeForRoute(ctx, "user", "user", serverName, upstream, "mt1office", revision, "request", key, "verifier", "", conf))
+	}
+
+	store("legacy", "")
+	_, _, err := state.createToken(ctx, "legacy", "code", "", "")
+	require.ErrorContains(t, err, "upstream OAuth route changed")
+	require.Zero(t, exchanges)
+
+	store("old", "route-one")
+	_, _, err = state.createToken(ctx, "old", "code", "", "")
+	require.NoError(t, err)
+	grant, err := gateway.GetMCPOAuthTokenForRoute(ctx, "user", serverName, upstream, "route-one")
+	require.NoError(t, err)
+	require.Equal(t, "token", grant.AccessToken)
+	_, err = gateway.GetMCPOAuthTokenForRoute(ctx, "user", serverName, upstream, "route-two")
+	require.ErrorIs(t, err, gorm.ErrRecordNotFound)
+
+	store("in-flight", "route-one")
+	nextRoute = "route-two"
+	_, _, err = state.createToken(ctx, "in-flight", "code", "", "")
+	require.ErrorContains(t, err, "upstream OAuth route changed")
+	require.Equal(t, 2, exchanges)
+
+	nextRoute = ""
+	store("fresh", "route-two")
+	_, _, err = state.createToken(ctx, "fresh", "code", "", "")
+	require.NoError(t, err)
+	require.ErrorContains(t, gateway.ReplaceMCPOAuthTokenForRoute(ctx, "user", serverName, upstream, "", "route-one", grant.GrantID, conf, &oauth2.Token{AccessToken: "old"}, ""), "route grant changed")
+	current, err := gateway.GetMCPOAuthTokenForRoute(ctx, "user", serverName, upstream, "route-two")
+	require.NoError(t, err)
+	require.Equal(t, "token", current.AccessToken)
 }

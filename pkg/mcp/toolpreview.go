@@ -92,7 +92,7 @@ func (sm *SessionManager) GenerateToolPreviews(ctx context.Context, tempMCPServe
 	// Create MCP client and list tools
 	client, err := sm.clientForServerWithOptions(ctx, "default", launchedConfig, ClientOption{
 		ClientName:   "Obot Tool Preview",
-		TokenStorage: sm.globalTokenStore.ForUserAndMCP(launchedConfig.UserID, cmp.Or(launchedConfig.MCPServerInstanceID, launchedConfig.MCPServerName), launchedConfig.URL),
+		TokenStorage: sm.globalTokenStore.ForUserAndMCP(launchedConfig.UserID, cmp.Or(launchedConfig.MCPServerInstanceID, launchedConfig.MCPServerName), launchedConfig.URL, launchedConfig.OAuthRouteRevision),
 	})
 	if err != nil {
 		return nil, err

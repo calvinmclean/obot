@@ -283,6 +283,7 @@ func (h *Handler) EnsureMCPServers(req router.Request, _ router.Response) error 
 				existing.Spec.MCPServerCatalogEntryName != server.Spec.MCPServerCatalogEntryName ||
 				!reflect.DeepEqual(existing.Spec.Manifest.Config, server.Spec.Manifest.Config) {
 				existing.Spec.Manifest = server.Spec.Manifest
+				existing.Spec.OAuthRouteRevision = server.Spec.OAuthRouteRevision
 				existing.Spec.UnsupportedTools = server.Spec.UnsupportedTools
 				existing.Spec.UserID = server.Spec.UserID
 				existing.Spec.MCPServerCatalogEntryName = server.Spec.MCPServerCatalogEntryName
@@ -334,6 +335,7 @@ func mcpServerForComponent(instance *v1.VMCPInstance, component types.VMCPCompon
 		Spec: v1.MCPServerSpec{
 			MCPServerCatalogEntryName: component.MCPServerCatalogEntryID,
 			Manifest:                  manifest,
+			OAuthRouteRevision:        component.CatalogEntry.OAuthRouteRevision,
 			UnsupportedTools:          slices.Clone(component.CatalogEntry.UnsupportedTools),
 			UserID:                    instance.Spec.UserID,
 			VMCPInstanceID:            instance.Name,

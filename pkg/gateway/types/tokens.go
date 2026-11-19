@@ -54,6 +54,7 @@ type TokenRequest struct {
 }
 
 type MCPOAuthToken struct {
+	RouteRevision string
 	oauth2.Endpoint
 	ClientID     string
 	ClientSecret string
@@ -76,6 +77,7 @@ type MCPOAuthToken struct {
 }
 
 type MCPOAuthPendingState struct {
+	RouteRevision     string
 	UpstreamChallenge string
 	HashedState       string `gorm:"primaryKey"`
 	State             string

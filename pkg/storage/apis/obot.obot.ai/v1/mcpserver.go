@@ -29,7 +29,8 @@ type MCPServer struct {
 }
 
 type MCPServerSpec struct {
-	Manifest types.MCPServerManifest `json:"manifest"`
+	Manifest           types.MCPServerManifest `json:"manifest"`
+	OAuthRouteRevision string                  `json:"oauthRouteRevision,omitempty"`
 	// List of tool names that are known to not work well in Obot.
 	UnsupportedTools []string `json:"unsupportedTools,omitempty"`
 	// Alias is a user-defined display label for this MCP server.

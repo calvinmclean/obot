@@ -60,8 +60,9 @@ type VMCPComponent struct {
 // MCPServerCatalogEntrySnapshot is the catalog-entry data retained by a VMCP.
 // Source ownership and mutable status are deliberately not included.
 type MCPServerCatalogEntrySnapshot struct {
-	Manifest         MCPServerCatalogEntryManifest `json:"manifest"`
-	UnsupportedTools []string                      `json:"unsupportedTools,omitempty"`
+	Manifest           MCPServerCatalogEntryManifest `json:"manifest"`
+	UnsupportedTools   []string                      `json:"unsupportedTools,omitempty"`
+	OAuthRouteRevision string                        `json:"oauthRouteRevision,omitempty"`
 }
 
 // MarshalJSON excludes tool previews from storage, API responses, and snapshot

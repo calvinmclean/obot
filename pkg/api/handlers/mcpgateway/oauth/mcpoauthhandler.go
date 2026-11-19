@@ -50,6 +50,7 @@ type mcpOAuthHandler struct {
 	mcpID         string
 	mcpURL        string
 	tunnelName    string
+	routeRevision string
 	userID        string
 	// initiatorUserID is the requesting Obot user; it differs from userID when the
 	// token is owned by "system" (tool previews). See validateCapturedCallback.
@@ -74,6 +75,8 @@ func NewMCPOAuthHandlerFactory(baseURL string, sessionManager *mcp.SessionManage
 		tokenStore:                globalTokenStore,
 		secretBindingAllowedLabel: secretBindingAllowedLabel,
 	}
+
+	f.stateMgr.validateRoute = f.validatePendingRoute
 
 	if !forceDynamicClient && strings.HasPrefix(baseURL, "https://") {
 		f.cimdDocumentURL = system.OAuthClientIDMetadataURL(baseURL)
@@ -117,11 +120,12 @@ func (f *MCPOAuthHandlerFactory) checkForMCPAuth(req api.Context, mcpServer v1.M
 			var pending bool
 
 			for _, requirement := range request.Spec.UpstreamOAuth {
-				if _, _, err := f.validateUpstreamRequirement(req, connections, requirement); err != nil {
+				_, cfg, err := f.validateUpstreamRequirement(req, connections, requirement)
+				if err != nil {
 					return "", err
 				}
 
-				completed, err := reconcileCapturedRequirement(req, request.Name, requirement)
+				completed, err := reconcileCapturedRequirement(req, request.Name, requirement, cfg.OAuthRouteRevision)
 				if err != nil {
 					return "", err
 				}
@@ -371,7 +375,7 @@ func (f *MCPOAuthHandlerFactory) staticOAuthPending(ctx context.Context, mcpServ
 		return false, nil
 	}
 
-	conf, token, err := f.tokenStore.ForUserAndMCP(oauthHandler.userID, oauthHandler.mcpID, oauthHandler.mcpURL).GetTokenConfig(ctx)
+	conf, token, err := f.tokenStore.ForUserAndMCP(oauthHandler.userID, oauthHandler.mcpID, oauthHandler.mcpURL, oauthHandler.routeRevision).GetTokenConfig(ctx)
 	if err != nil {
 		return false, fmt.Errorf("failed to check stored OAuth token for MCP server %s: %w", mcpServer.Name, err)
 	}
@@ -486,7 +490,7 @@ func (m *mcpOAuthHandler) NewState(ctx context.Context, conf *oauth2.Config, res
 	// the pending state from the DB directly.
 	ch := make(chan mcp.CallbackPayload)
 
-	return state, ch, m.stateMgr.store(ctx, m.userID, m.initiatorUserID, m.mcpID, m.mcpURL, m.tunnelName, m.oauthAuthRequestID, state, verifier, resourceURL, conf, m.upstreamChallenge)
+	return state, ch, m.stateMgr.storeForRoute(ctx, m.userID, m.initiatorUserID, m.mcpID, m.mcpURL, m.tunnelName, m.routeRevision, m.oauthAuthRequestID, state, verifier, resourceURL, conf, m.upstreamChallenge)
 }
 
 func (m *mcpOAuthHandler) Lookup(ctx context.Context) (string, string, error) {
@@ -516,6 +520,7 @@ func (m *mcpOAuthHandler) Lookup(ctx context.Context) (string, string, error) {
 // preflight checks and authorization started directly from a captured challenge.
 func (f *MCPOAuthHandlerFactory) prepareUpstreamOAuth(req api.Context, mcpServer v1.MCPServer, mcpServerConfig mcp.ServerConfig, userID, mcpID, oauthAppAuthRequestID string) (*mcpOAuthHandler, mcp.ClientOption, error) {
 	oauthHandler := f.newMCPOAuthHandler(req.GatewayClient, userID, mcpID, mcpServerConfig.URL, mcpServerConfig.TunnelName, oauthAppAuthRequestID, mcpServerConfig.MCPCatalogEntryName)
+	oauthHandler.routeRevision = mcpServerConfig.OAuthRouteRevision
 	oauthHandler.localLogin = mcpServerConfig.LocalhostCallbackEnabled
 	if req.User != nil {
 		oauthHandler.initiatorUserID = req.User.GetUID()
@@ -557,7 +562,7 @@ func (f *MCPOAuthHandlerFactory) prepareUpstreamOAuth(req api.Context, mcpServer
 		OAuthRedirectURL:              oauthHandler.redirectURL,
 		OAuthClientIDMetadataDocument: f.clientMetadataForRedirect(oauthHandler.redirectURL),
 		ClientName:                    obotOAuthClientName,
-		TokenStorage:                  f.tokenStore.ForUserAndMCP(userID, mcpID, mcpServerConfig.URL),
+		TokenStorage:                  f.tokenStore.ForUserAndMCP(userID, mcpID, mcpServerConfig.URL, mcpServerConfig.OAuthRouteRevision),
 		CallbackHandler:               oauthHandler,
 		ClientLookup:                  oauthHandler,
 	}, nil
