@@ -187,6 +187,10 @@ func (h *MCPCatalogHandler) Update(req api.Context) error {
 	newTokens := mergeCatalogTokens(manifest.SourceURLs, manifest.SourceURLCredentials, existingCred.Secrets)
 	removeSharedCredentialTokens(newTokens, manifest.SourceURLGitCredentialIDs)
 
+	if err := clearReaddedSourceTunnelAssignments(req, &catalog, manifest.SourceURLs); err != nil {
+		return err
+	}
+
 	catalog.Spec.SourceURLs = manifest.SourceURLs
 	catalog.Spec.SourceURLGitCredentialIDs = manifest.SourceURLGitCredentialIDs
 

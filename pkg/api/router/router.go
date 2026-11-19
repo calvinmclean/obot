@@ -242,6 +242,10 @@ func NewRouter(ctx context.Context, services *services.Services) (*Router, error
 	mux.HandleFunc("GET /api/mcp-catalogs/{catalog_id}/orphaned-vmcps", mcpCatalogs.ListOrphanedVMCPs)
 	mux.HandleFunc("PUT /api/mcp-catalogs/{catalog_id}", mcpCatalogs.Update)
 
+	mux.HandleFunc("GET /api/mcp-catalogs/{catalog_id}/entries/by-key/{entry_key}/tunnel", mcpCatalogs.GetTunnelAssignment)
+	mux.HandleFunc("PUT /api/mcp-catalogs/{catalog_id}/entries/by-key/{entry_key}/tunnel", mcpCatalogs.PutTunnelAssignment)
+	mux.HandleFunc("DELETE /api/mcp-catalogs/{catalog_id}/entries/by-key/{entry_key}/tunnel", mcpCatalogs.DeleteTunnelAssignment)
+
 	// MCPServerCatalogEntries (admin only, for single-user and remote MCP servers)
 	mux.HandleFunc("GET /api/mcp-catalogs/{catalog_id}/entries", mcpCatalogs.ListEntries)
 	mux.HandleFunc("GET /api/mcp-catalogs/{catalog_id}/entries/{entry_id}", mcpCatalogs.GetEntry)

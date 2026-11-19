@@ -410,6 +410,7 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		v1.AuthProviderList{}.OpenAPIModelName():                                                  schema_storage_apis_obotobotai_v1_AuthProviderList(ref),
 		v1.AuthProviderSpec{}.OpenAPIModelName():                                                  schema_storage_apis_obotobotai_v1_AuthProviderSpec(ref),
 		v1.AuthProviderStatus{}.OpenAPIModelName():                                                schema_storage_apis_obotobotai_v1_AuthProviderStatus(ref),
+		v1.CatalogEntryTunnelAssignment{}.OpenAPIModelName():                                      schema_storage_apis_obotobotai_v1_CatalogEntryTunnelAssignment(ref),
 		v1.ClaudeSessionRepository{}.OpenAPIModelName():                                           schema_storage_apis_obotobotai_v1_ClaudeSessionRepository(ref),
 		v1.DefaultModelAlias{}.OpenAPIModelName():                                                 schema_storage_apis_obotobotai_v1_DefaultModelAlias(ref),
 		v1.DefaultModelAliasList{}.OpenAPIModelName():                                             schema_storage_apis_obotobotai_v1_DefaultModelAliasList(ref),
@@ -20685,6 +20686,48 @@ func schema_storage_apis_obotobotai_v1_AuthProviderStatus(ref common.ReferenceCa
 	}
 }
 
+func schema_storage_apis_obotobotai_v1_CatalogEntryTunnelAssignment(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "CatalogEntryTunnelAssignment is administrator-owned state. Sync can import a changed destination without projecting a stale approval into a runtime manifest.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"sourceURL": {
+						SchemaProps: spec.SchemaProps{
+							Default: "",
+							Type:    []string{"string"},
+							Format:  "",
+						},
+					},
+					"entryKey": {
+						SchemaProps: spec.SchemaProps{
+							Default: "",
+							Type:    []string{"string"},
+							Format:  "",
+						},
+					},
+					"tunnelName": {
+						SchemaProps: spec.SchemaProps{
+							Default: "",
+							Type:    []string{"string"},
+							Format:  "",
+						},
+					},
+					"expectedURL": {
+						SchemaProps: spec.SchemaProps{
+							Default: "",
+							Type:    []string{"string"},
+							Format:  "",
+						},
+					},
+				},
+				Required: []string{"sourceURL", "entryKey", "tunnelName", "expectedURL"},
+			},
+		},
+	}
+}
+
 func schema_storage_apis_obotobotai_v1_ClaudeSessionRepository(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -22864,6 +22907,11 @@ func schema_storage_apis_obotobotai_v1_MCPServerCatalogEntrySpec(ref common.Refe
 							Format:  "",
 						},
 					},
+					"tunnelAssignment": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref(v1.CatalogEntryTunnelAssignment{}.OpenAPIModelName()),
+						},
+					},
 					"sourceURL": {
 						SchemaProps: spec.SchemaProps{
 							Type:   []string{"string"},
@@ -22882,7 +22930,7 @@ func schema_storage_apis_obotobotai_v1_MCPServerCatalogEntrySpec(ref common.Refe
 			},
 		},
 		Dependencies: []string{
-			"github.com/obot-platform/obot/apiclient/types.MCPServerCatalogEntryManifest"},
+			"github.com/obot-platform/obot/apiclient/types.MCPServerCatalogEntryManifest", v1.CatalogEntryTunnelAssignment{}.OpenAPIModelName()},
 	}
 }
 

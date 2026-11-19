@@ -151,6 +151,11 @@ func (in AuthProviderStatus) OpenAPIModelName() string {
 }
 
 // OpenAPIModelName returns the OpenAPI model name for this type.
+func (in CatalogEntryTunnelAssignment) OpenAPIModelName() string {
+	return "com.github.obot-platform.obot.pkg.storage.apis.obot.obot.ai.v1.CatalogEntryTunnelAssignment"
+}
+
+// OpenAPIModelName returns the OpenAPI model name for this type.
 func (in ClaudeSessionRepository) OpenAPIModelName() string {
 	return "com.github.obot-platform.obot.pkg.storage.apis.obot.obot.ai.v1.ClaudeSessionRepository"
 }

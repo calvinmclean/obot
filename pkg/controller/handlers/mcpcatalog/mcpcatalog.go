@@ -336,11 +336,33 @@ func filterConflictingCatalogEntries(ctx context.Context, c kclient.Client, name
 		return nil, nil, err
 	}
 	existingByName := make(map[kclient.ObjectKey]v1.MCPServerCatalogEntry, len(existingEntries.Items))
+	type sourceEntryKey struct {
+		catalog, source, entryKey string
+	}
+	// Keep the storage identity of eligible entries stable across renames. This
+	// lets sync and admin writes use the same object without copying approvals.
+	stableNames := make(map[sourceEntryKey]string)
+	stableRefs := make(map[kclient.ObjectKey]sourceEntryKey)
 	for i := range existingEntries.Items {
 		entry := &existingEntries.Items[i]
 		existingByName[kclient.ObjectKeyFromObject(entry)] = *entry
+		if !entry.IsGitManaged() || entry.Spec.Manifest.EntryKey == "" {
+			continue
+		}
+		manifest := entry.Spec.Manifest
+		if entry.Spec.TunnelAssignment == nil && (manifest.Runtime != types.RuntimeRemote || manifest.RemoteConfig == nil || manifest.RemoteConfig.FixedURL == "") {
+			continue
+		}
+		ref := sourceEntryKey{entry.Spec.MCPCatalogName, entry.Spec.SourceURL, manifest.EntryKey}
+		stableRefs[kclient.ObjectKeyFromObject(entry)] = ref
+		if _, duplicate := stableNames[ref]; duplicate {
+			stableNames[ref] = ""
+		} else {
+			stableNames[ref] = entry.Name
+		}
 	}
 
+	claimedNames := make(map[kclient.ObjectKey]bool)
 	for _, obj := range objs {
 		entry, ok := obj.(*v1.MCPServerCatalogEntry)
 		if !ok {
@@ -348,7 +370,24 @@ func filterConflictingCatalogEntries(ctx context.Context, c kclient.Client, name
 			continue
 		}
 
+		ref := sourceEntryKey{entry.Spec.MCPCatalogName, entry.Spec.SourceURL, entry.Spec.Manifest.EntryKey}
+		originalName := entry.Name
+		if stableName, found := stableNames[ref]; found {
+			if stableName == "" {
+				return nil, nil, fmt.Errorf("catalog entry %q has an ambiguous source key", entry.Spec.Manifest.Name)
+			}
+			entry.Name = stableName
+		} else if previous, found := stableRefs[kclient.ObjectKeyFromObject(entry)]; found && previous != ref {
+			// The display name was reused for a different source key. A fresh
+			// object keeps the old assignment from resurfacing if that key returns.
+			entry.Name = name.SafeHashConcatName(ref.catalog, "source", ref.source, ref.entryKey, originalName)
+		}
 		key := kclient.ObjectKeyFromObject(entry)
+		renamed := originalName != entry.Name
+		if previousRenamed, duplicate := claimedNames[key]; duplicate && (renamed || previousRenamed) {
+			return nil, nil, fmt.Errorf("multiple catalog entries resolve to %q", key.Name)
+		}
+		claimedNames[key] = renamed
 		existing, found := existingByName[key]
 		if !found {
 			if err := c.Get(ctx, key, &existing); err == nil {
@@ -460,6 +499,8 @@ func detachCatalogEntry(ctx context.Context, c kclient.Client, catalog *v1.MCPCa
 
 		entry.Spec.Editable = false
 		entry.Spec.Detached = true
+		// Existing deployments retain their snapshots, while a future import needs fresh approval.
+		entry.Spec.TunnelAssignment = nil
 		for key := range entry.Annotations {
 			if strings.HasPrefix(key, apply.LabelPrefix) {
 				delete(entry.Annotations, key)

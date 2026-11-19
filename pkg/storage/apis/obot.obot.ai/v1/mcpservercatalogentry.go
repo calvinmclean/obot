@@ -33,9 +33,19 @@ type MCPServerCatalogEntrySpec struct {
 	MCPCatalogName          string                              `json:"mcpCatalogName,omitempty"`
 	Editable                bool                                `json:"editable,omitempty"`
 	Detached                bool                                `json:"detached"`
+	TunnelAssignment        *CatalogEntryTunnelAssignment       `json:"tunnelAssignment,omitempty"`
 	SourceURL               string                              `json:"sourceURL,omitempty"`
 	// PowerUserWorkspaceID contains the name of the PowerUserWorkspace that owns this catalog entry, if there is one.
 	PowerUserWorkspaceID string `json:"powerUserWorkspaceID,omitempty"`
+}
+
+// CatalogEntryTunnelAssignment is administrator-owned state. Sync can import a
+// changed destination without projecting a stale approval into a runtime manifest.
+type CatalogEntryTunnelAssignment struct {
+	SourceURL   string `json:"sourceURL"`
+	EntryKey    string `json:"entryKey"`
+	TunnelName  string `json:"tunnelName"`
+	ExpectedURL string `json:"expectedURL"`
 }
 
 type MCPServerCatalogEntryStatus struct {
