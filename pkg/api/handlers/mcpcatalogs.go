@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/obot-platform/nah/pkg/name"
 	"github.com/obot-platform/obot/apiclient/types"
 	"github.com/obot-platform/obot/pkg/accesscontrolrule"
@@ -136,19 +137,24 @@ func (*MCPCatalogHandler) Get(req api.Context) error {
 
 // Refresh refreshes a catalog to sync its entries.
 func (h *MCPCatalogHandler) Refresh(req api.Context) error {
-	catalogName := req.PathValue("catalog_id")
+	return requestMCPCatalogSync(req)
+}
 
-	var catalog v1.MCPCatalog
-	if err := req.Get(&catalog, catalogName); err != nil {
-		return fmt.Errorf("failed to get catalog: %w", err)
-	}
-
-	if catalog.Annotations == nil {
-		catalog.Annotations = make(map[string]string)
-	}
-	catalog.Annotations[v1.MCPCatalogSyncAnnotation] = "true"
-
-	return req.Update(&catalog)
+func requestMCPCatalogSync(req api.Context) error {
+	// A new value forces a resource version change even while another sync
+	// request is pending, so that sync cannot accidentally clear the newer request.
+	requestID := uuid.NewString()
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		var catalog v1.MCPCatalog
+		if err := req.Get(&catalog, req.PathValue("catalog_id")); err != nil {
+			return fmt.Errorf("failed to get catalog: %w", err)
+		}
+		if catalog.Annotations == nil {
+			catalog.Annotations = make(map[string]string, 1)
+		}
+		catalog.Annotations[v1.MCPCatalogSyncAnnotation] = requestID
+		return req.Update(&catalog)
+	})
 }
 
 // Update updates a catalog (admin only, default catalog only).
@@ -1420,7 +1426,7 @@ func convertMCPCatalog(catalog v1.MCPCatalog, tokenEnv map[string]string) types.
 		SourceURLGitCredentialIDs: catalog.Spec.SourceURLGitCredentialIDs,
 		LastSynced:                *types.NewTime(catalog.Status.LastSyncTime.Time),
 		SyncErrors:                catalog.Status.SyncErrors,
-		IsSyncing:                 catalog.Status.IsSyncing || catalog.Annotations[v1.MCPCatalogSyncAnnotation] == "true",
+		IsSyncing:                 catalog.Status.IsSyncing || catalog.Annotations[v1.MCPCatalogSyncAnnotation] != "",
 	}
 }
 

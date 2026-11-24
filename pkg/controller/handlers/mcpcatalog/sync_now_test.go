@@ -3,6 +3,8 @@ package mcpcatalog
 import (
 	"testing"
 
+	"github.com/obot-platform/nah/pkg/router"
+
 	v1 "github.com/obot-platform/obot/pkg/storage/apis/obot.obot.ai/v1"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -31,4 +33,29 @@ func TestSyncNowIgnoresRecentSync(t *testing.T) {
 	require.NoError(t, client.Get(t.Context(), kclient.ObjectKeyFromObject(catalog), &current))
 	require.NotContains(t, current.Annotations, v1.MCPCatalogSyncAnnotation)
 	require.False(t, current.Status.IsSyncing)
+}
+
+func TestCatalogSyncRequestIgnoresRecentSync(t *testing.T) {
+	dir := t.TempDir()
+	writeParseTestManifest(t, dir, "Fresh", "from source")
+
+	catalog := testCatalog()
+	catalog.Spec.SourceURLs = []string{dir}
+	catalog.Annotations = map[string]string{
+		forceSyncStartupAnnotation:  startupSyncGeneration,
+		v1.MCPCatalogSyncAnnotation: "distinct-request",
+	}
+	catalog.Status.LastSyncTime = metav1.Now()
+	client := newCatalogFakeClient(catalog)
+
+	require.NoError(t, newParseTestHandler(t).Sync(router.Request{
+		Ctx: t.Context(), Client: client, Object: catalog,
+	}, discardResponse{}))
+	var entries v1.MCPServerCatalogEntryList
+	require.NoError(t, client.List(t.Context(), &entries))
+	require.Len(t, entries.Items, 1)
+
+	var current v1.MCPCatalog
+	require.NoError(t, client.Get(t.Context(), kclient.ObjectKeyFromObject(catalog), &current))
+	require.NotContains(t, current.Annotations, v1.MCPCatalogSyncAnnotation)
 }

@@ -115,7 +115,7 @@ func (h *Handler) Sync(req router.Request, resp router.Response) error {
 	validationOptions := h.remoteURLValidationConfig
 	validationOptions.ResourceMaximums = maximums
 
-	forceSync := mcpCatalog.Annotations[v1.MCPCatalogSyncAnnotation] == "true" || mcpCatalog.Annotations[forceSyncStartupAnnotation] != startupSyncGeneration
+	forceSync := mcpCatalog.Annotations[v1.MCPCatalogSyncAnnotation] != "" || mcpCatalog.Annotations[forceSyncStartupAnnotation] != startupSyncGeneration
 	if !forceSync && !mcpCatalog.Status.LastSyncTime.IsZero() {
 		timeSinceLastSync := time.Since(mcpCatalog.Status.LastSyncTime.Time)
 		if timeSinceLastSync < time.Hour {

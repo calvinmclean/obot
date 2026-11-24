@@ -103,6 +103,11 @@ func (*MCPCatalogHandler) PutTunnelAssignment(req api.Context) error {
 	}); err != nil {
 		return err
 	}
+	// Also request a sync on an identical retry in case the preceding write
+	// saved the assignment but failed to request reconciliation.
+	if err := requestMCPCatalogSync(req); err != nil {
+		return fmt.Errorf("tunnel assignment saved, but failed to request catalog sync: %w", err)
+	}
 	return req.Write(catalogTunnelAssignmentResponse{
 		catalogTunnelAssignmentRequest: input,
 		CurrentURL:                     input.ExpectedURL,
@@ -111,7 +116,9 @@ func (*MCPCatalogHandler) PutTunnelAssignment(req api.Context) error {
 }
 
 func (*MCPCatalogHandler) DeleteTunnelAssignment(req api.Context) error {
+	var foundEntry bool
 	if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		foundEntry = false
 		entry, err := resolveTunnelAssignmentEntry(req)
 		if err != nil {
 			if httpErr, ok := err.(*types.ErrHTTP); ok && httpErr.Code == http.StatusNotFound || apierrors.IsNotFound(err) {
@@ -119,6 +126,7 @@ func (*MCPCatalogHandler) DeleteTunnelAssignment(req api.Context) error {
 			}
 			return err
 		}
+		foundEntry = true
 		if tunnelAssignmentForRequest(req, entry) == nil {
 			return nil
 		}
@@ -126,6 +134,11 @@ func (*MCPCatalogHandler) DeleteTunnelAssignment(req api.Context) error {
 		return req.Update(entry)
 	}); err != nil {
 		return err
+	}
+	if foundEntry {
+		if err := requestMCPCatalogSync(req); err != nil {
+			return fmt.Errorf("tunnel assignment cleared, but failed to request catalog sync: %w", err)
+		}
 	}
 	req.WriteHeader(http.StatusNoContent)
 	return nil

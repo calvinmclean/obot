@@ -74,6 +74,14 @@ func TestSyncedCatalogTunnelAssignment(t *testing.T) {
 
 	req, _ = catalogEntryRequest(t, storage, nil, http.MethodPut, path, input, values)
 	require.NoError(t, handler.PutTunnelAssignment(req))
+	require.NoError(t, storage.Get(t.Context(), kclient.ObjectKeyFromObject(catalog), catalog))
+	requestID := catalog.Annotations[v1.MCPCatalogSyncAnnotation]
+	require.NotEmpty(t, requestID)
+
+	req, _ = catalogEntryRequest(t, storage, nil, http.MethodPut, path, input, values)
+	require.NoError(t, handler.PutTunnelAssignment(req))
+	require.NoError(t, storage.Get(t.Context(), kclient.ObjectKeyFromObject(catalog), catalog))
+	require.NotEqual(t, requestID, catalog.Annotations[v1.MCPCatalogSyncAnnotation])
 
 	require.NoError(t, storage.Get(t.Context(), kclient.ObjectKeyFromObject(entry), entry))
 	require.Empty(t, entry.Spec.Manifest.RemoteConfig.TunnelName)
@@ -89,9 +97,13 @@ func TestSyncedCatalogTunnelAssignment(t *testing.T) {
 	require.False(t, state.Valid)
 
 	for range 2 {
+		previousRequest := catalog.Annotations[v1.MCPCatalogSyncAnnotation]
 		req, response = catalogEntryRequest(t, storage, nil, http.MethodDelete, path, nil, values)
 		require.NoError(t, handler.DeleteTunnelAssignment(req))
 		require.Equal(t, http.StatusNoContent, response.Code)
+		require.NoError(t, storage.Get(t.Context(), kclient.ObjectKeyFromObject(catalog), catalog))
+		require.NotEmpty(t, catalog.Annotations[v1.MCPCatalogSyncAnnotation])
+		require.NotEqual(t, previousRequest, catalog.Annotations[v1.MCPCatalogSyncAnnotation])
 	}
 	require.NoError(t, storage.Get(t.Context(), kclient.ObjectKeyFromObject(entry), entry))
 	require.Nil(t, entry.Spec.TunnelAssignment)
